@@ -1,0 +1,21 @@
+# Obsidian workspace state (cambia constantemente, no sirve versionarlo)
+.obsidian/workspace
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+.obsidian/appearance.json
+
+# Trash de Obsidian
+.trash/
+
+# Sistema operativo
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+*~
+
+# Editores
+.vscode/
+.idea/
