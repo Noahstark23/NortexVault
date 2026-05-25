@@ -1,21 +1,79 @@
-# Obsidian workspace state (cambia constantemente, no sirve versionarlo)
+# =====================================================
+# .gitignore — NortexVault
+# Excluye: state de Obsidian que cambia solo, basura de OS, archivos temporales.
+# Sí versiona: notas, templates, configuración estable de plugins.
+# =====================================================
+
+# --- Obsidian: workspace state (cambia constantemente, no sirve versionarlo)
 .obsidian/workspace
 .obsidian/workspace.json
 .obsidian/workspace-mobile.json
 .obsidian/cache
 .obsidian/appearance.json
 
-# Trash de Obsidian
+# --- Obsidian: data ephemeral
+.obsidian/snippets/
+.obsidian/themes/
+
+# --- Obsidian: trash y archivos temporales
 .trash/
 
-# Sistema operativo
-.DS_Store
+# --- Plugin: Obsidian Git (logs y cache que no sirve versionar)
+.obsidian/plugins/obsidian-git/repo*.log
+
+# --- Sistema operativo: Windows
 Thumbs.db
 desktop.ini
+ehthumbs.db
+ehthumbs_vista.db
+*.lnk
+
+# --- Sistema operativo: macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# --- Sistema operativo: Linux
+*~
+.directory
+.Trash-*
+
+# --- Editores de texto y IDEs
 *.swp
 *.swo
-*~
-
-# Editores
+*.swn
+*.bak
+*.tmp
 .vscode/
 .idea/
+.history/
+
+# --- Archivos de Microsoft Office temporales
+~$*
+*.tmp
+
+# --- Logs y crashes
+*.log
+crash.log
+
+# --- Archivos sensibles (por si acaso)
+*.env
+*.key
+*.pem
+*.p12
+secrets.json
+credentials.json
+
+# --- Archivos grandes que NO deben entrar al vault
+*.mp4
+*.mov
+*.zip
+*.tar.gz
+*.7z
+*.iso
+
+# --- Otros artefactos
+node_modules/
+__pycache__/
+*.pyc
