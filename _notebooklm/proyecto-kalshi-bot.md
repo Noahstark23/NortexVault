@@ -1,15 +1,15 @@
 # Proyecto: kalshi-bot
 
 > Fuente consolidada para NotebookLM. Standalone — sin wikilinks no resueltos.
-> Última actualización: 2026-05-26 (post-incidente V2).
+> Última actualización: 2026-05-26 (T+13h post-rollback, fix Opción A entregado y mergeable).
 
 ## Resumen ejecutivo
 Bot automatizado de trading en Kalshi (mercado de eventos). Roadmap por fases:
-- **Fase 1** — Data capture only (V1, operando estable).
-- **Fase 2** — Motor 1 arbitraje intra-Kalshi (requiere V2 = OrderbookManagerV2 sano, actualmente bloqueado post-incidente del 25-mayo-2026).
+- **Fase 1** — Data capture only (V1, operando estable 13h+ post-rollback).
+- **Fase 2** — Motor 1 arbitraje intra-Kalshi (requiere V2 = OrderbookManagerV2 sano. Bug del 25-may corregido en commits `ed7b7ac` + `b9abaa0`, fix mergeable, segunda ventana de activación pendiente con revisión sobria del diff).
 - **Fase 3** — `TRADING_ENABLED=true` (sin tocar hasta Fase 2 cerrada con confianza).
 
-Estado actual: V1 capturando 40 markets KXMLB-26 vía REST + WS, 9h+ estable post-rollback (350K+ events sin errores). V2 dormant detrás de flag `USE_ORDERBOOK_MANAGER_V2=false` tras incidente.
+Estado actual: V1 capturando 39 markets multi-deporte (KXMLB MLB + KXUCL Champions League + KXNHL hockey) vía REST + WS, **13h+ estable post-rollback (289K events en último ciclo, 4.59M acumulados, 0 errores)**. V2 dormant detrás de flag `USE_ORDERBOOK_MANAGER_V2=false` tras incidente — fix entregado, no re-activado todavía por aplicación disciplinada de Lección 9.
 
 ## Motivación
 Construir un flujo de ingreso independiente y escalable. Si funciona, deja de depender de un solo canal de ingresos. Aprendizaje aplicable a otros mercados (Polymarket, futuros, opciones).
@@ -116,16 +116,49 @@ La decisión pertenece al operador del runbook (humano), no a los agentes que as
 - `orderbook_events`/min: 108 (-7%, bootstrap esperable)
 - **87 errores `delta produces qty<0` en 12 ráfagas**
 
-### Post-rollback V1 (9h+ estable)
+### Post-rollback V1 (13h+ estable a 2026-05-26 18:13 UTC)
 - Sin errores `delta produces qty<0`
-- 350K+ events capturados
+- 289,986 events en último ciclo, 4,590,874 acumulados
+- Tasa sostenida: ~6.2 events/s
+- 39 markets tracked (mix multi-deporte ahora: MLB + UCL + NHL)
 - DB growth: ~250 MB/día confirmado (= 90 GB/año proyectado)
+
+## Fix Opción A entregado por Claude Code (mergeable)
+
+**Commits:** `ed7b7ac` (cambios lógicos) + `b9abaa0` (correcciones de formato/tests vs brief).
+
+**Archivos modificados:**
+- `src/strategies/motor_1_arbitrage/orderbook_manager_v2.py`:
+  - líneas 170-175: swap orden seq/apply en `handle_message`
+  - líneas 343-348: logging INFO/DEBUG raw snapshot
+  - líneas 415-416: filter `size=0` en `_parse_fp_levels`
+- `src/clients/kalshi_ws.py` línea 320: `logger.opt(exception=r).error(...)` (compatible con Loguru)
+- `tests/strategies/motor_1_arbitrage/test_v2_fixes.py`: 4 tests nuevos
+
+**Suite completa: 282/282 ✓** sin regresiones.
+
+**Una desviación técnica justificada:** el brief especificó `exc_info=r` (patrón stdlib logging). El stack del proyecto usa Loguru — `exc_info=` se ignora silentemente. Claude Code escaló y aplicó `logger.opt(exception=r).error(...)` (API equivalente correcta para Loguru). Test #4 valida que el wrapper recibe la excepción real. Aplicación correcta de la cláusula de escalación del brief.
+
+## Decisión disciplinada (2026-05-26): no reactivar hoy
+
+Tras 24h continuas operando el incidente, decisión explícita de **no abrir segunda ventana hoy** pese a tener el fix listo:
+- Fatiga acumulada del operador viola espíritu del runbook 12.5 (2-3h supervisión activa)
+- Fix no respiró (<2h desde commit), sin revisión sobria del diff
+- V1 sano sin urgencia operativa (`TRADING_ENABLED=false`, 0 capital trabajando)
+
+**Pendiente para próxima sesión (no requiere código):**
+1. Confirmar que swap seq/apply en `handle_message:170-175` cubre también path de `_apply_snapshot_msg`
+2. Verificar manualmente en Coolify que `logger.opt(exception=r)` produce el log esperado
+3. Considerar Test #2b operativo (delta siguiente con seq correcta post-DesyncError se procesa OK)
+
+Esta decisión es el primer test empírico de Lección 9 aplicada después de redactada: no relajar el runbook ni siquiera cuando es inconveniente — especialmente cuando es inconveniente.
 
 ## Deuda técnica catalogada
 
-**Bloqueantes para reactivación V2:**
-- Fix Opción A implementado y testeado
-- Logging raw snapshot WS agregado pre-flip
+**Bloqueantes para segunda ventana de reactivación V2:**
+- Revisión sobria del diff del fix (3 puntos arriba)
+- Merge de Lección 9 al `KALSHI_BOT_CONTEXT.md` (header v1.5)
+- Ventana de 2-3h libres confirmadas
 
 **No bloqueantes (próximas ventanas):**
 - Política de retención DB + VACUUM mensual vía cron (90 GB/año necesita límite)
@@ -136,15 +169,21 @@ La decisión pertenece al operador del runbook (humano), no a los agentes que as
 - Cross-validation REST↔WS si Opción A insuficiente
 - Reemplazo de SQLite por backend con mejor concurrencia si crecimiento DB lo justifica
 
-## Próximos pasos
-1. Claude Code ejecuta brief de Opción A (en curso)
-2. Code review del diff por mi parte antes de merge
-3. Segunda ventana de activación V2 con runbook 12.5 literal (2–3h continuas reservadas)
-4. Si V2 estable a T+2h → desbloquear Motor 1 (paso separado, otra ventana)
-5. Si Opción A falla → pivot a B con scope reajustado (invariantes internas, no cross-validation externa)
+## Métrica de éxito para la segunda ventana
+No solo "no falla" sino **"no falla por la razón que arreglamos"**. Si vuelven a aparecer `qty<0` con magnitudes similares → H1 (bug `size=0`) no era el único bug, reabrir investigación con el raw snapshot logging que el fix ya instaló (cambio 2b).
+
+## Próximos pasos (orden)
+1. (próxima sesión) Mergear Lección 9 al `KALSHI_BOT_CONTEXT.md` v1.5
+2. (próxima sesión) Mergear PR del fix a main si no lo está
+3. (próxima sesión) Revisión sobria del diff (20 min, 3 puntos)
+4. Si revisión limpia → agendar ventana V2 con 2-3h libres confirmadas
+5. Segunda ventana V2 con runbook 12.5 literal otra vez
+6. Si V2 estable a T+2h → desbloquear Motor 1 (paso separado, otra ventana)
+7. Si Opción A falla → pivot a B con scope reajustado (invariantes internas, no cross-validation externa)
 
 ## Referencias clave
-- Runbook 12.5 — en `KALSHI_BOT_CONTEXT.md` del repo
+- Runbook 12.5 — en `KALSHI_BOT_CONTEXT.md` del repo (v1.5 con Lección 9 pendiente merge)
 - Lección 7 — WS muerto silenciosamente con bot "healthy" (precedente del patrón "todo verde + bug oculto")
 - Lección 8 — "deuda del roadmap" como retórica vs argumento técnico
+- Lección 9 — runbook literal, atribución externa prematura, fix sin respirar (este incidente)
 - Lección 9 — runbook literal vs interpretación clemente (este incidente)
