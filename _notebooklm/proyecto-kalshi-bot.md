@@ -1,15 +1,15 @@
 # Proyecto: kalshi-bot
 
 > Fuente consolidada para NotebookLM. Standalone — sin wikilinks no resueltos.
-> Última actualización: 2026-05-26 (T+13h post-rollback, fix Opción A entregado y mergeable).
+> Última actualización: 2026-05-27 (pre-flight completo segunda ventana V2, esperando flip).
 
 ## Resumen ejecutivo
 Bot automatizado de trading en Kalshi (mercado de eventos). Roadmap por fases:
-- **Fase 1** — Data capture only (V1, operando estable 13h+ post-rollback).
-- **Fase 2** — Motor 1 arbitraje intra-Kalshi (requiere V2 = OrderbookManagerV2 sano. Bug del 25-may corregido en commits `ed7b7ac` + `b9abaa0`, fix mergeable, segunda ventana de activación pendiente con revisión sobria del diff).
+- **Fase 1** — Data capture only (V1, operando estable continuamente).
+- **Fase 2** — Motor 1 arbitraje intra-Kalshi (requiere V2 = OrderbookManagerV2 sano. Bug del 25-may corregido en commits `ed7b7ac` + `b9abaa0`. Segunda ventana de activación en pre-flight completo, pendiente gates finales).
 - **Fase 3** — `TRADING_ENABLED=true` (sin tocar hasta Fase 2 cerrada con confianza).
 
-Estado actual: V1 capturando 39 markets multi-deporte (KXMLB MLB + KXUCL Champions League + KXNHL hockey) vía REST + WS, **13h+ estable post-rollback (289K events en último ciclo, 4.59M acumulados, 0 errores)**. V2 dormant detrás de flag `USE_ORDERBOOK_MANAGER_V2=false` tras incidente — fix entregado, no re-activado todavía por aplicación disciplinada de Lección 9.
+Estado actual al 27-may 15:00 UTC: V1 capturando 38 markets multi-deporte (MLB + UCL + NHL) vía REST + WS, 8h+ healthy hoy, 0 errores. DB en 647 MB con crecimiento consistente. Pre-flight de segunda ventana V2 ejecutado: backup íntegro persistido, Telegram API responde 200, /status saludable. Esperando confirmación de recepción Telegram en cliente + SHA de Lección 9 mergeada al `KALSHI_BOT_CONTEXT.md` v1.5 para flippear `USE_ORDERBOOK_MANAGER_V2=true`.
 
 ## Motivación
 Construir un flujo de ingreso independiente y escalable. Si funciona, deja de depender de un solo canal de ingresos. Aprendizaje aplicable a otros mercados (Polymarket, futuros, opciones).
@@ -172,14 +172,40 @@ Esta decisión es el primer test empírico de Lección 9 aplicada después de re
 ## Métrica de éxito para la segunda ventana
 No solo "no falla" sino **"no falla por la razón que arreglamos"**. Si vuelven a aparecer `qty<0` con magnitudes similares → H1 (bug `size=0`) no era el único bug, reabrir investigación con el raw snapshot logging que el fix ya instaló (cambio 2b).
 
+## Segunda ventana V2 — preparación completa (27-may)
+
+**Revisión sobria del diff (cerrada limpia):**
+- `b9abaa0` confirmado como format/tests sin cambios funcionales
+- Lógica V2 efectiva = `ed7b7ac`
+- Tests endurecidos (no relajados): ticker de producción `KXMLB-26-ATH`, seq 100/101 + 1000/1001, regresión con magnitud -6247
+
+**Inspección de `_apply_snapshot_msg` (3 min, confianza estructural):**
+- TODAS las excepciones posibles del path snapshot ocurren antes del seq update
+- `apply_snapshot` es atómica: 8 setattr en asyncio single-thread sin await
+- Cero corrupción posible
+- Hallazgo colateral: `parse_price_to_cents` no valida rango [0,100] → ticket de hardening defensivo (NO bloqueante)
+
+**Cheat-sheet operativo finalizado con adiciones de Lección 9:**
+- Sección 5.bis nueva: línea defensiva T+5 a T+30, 1 error no-SidGap adicional = rollback inmediato sin réplica
+- Sección 6 ampliada: preservar logs en archivo (`docker logs --tail 1000 > /tmp/rollback_TIMESTAMP.log`) ANTES de cualquier debug
+
+**Pre-flight ejecutado (27-may 14:58 UTC):**
+- Backup SQLite con `.backup` + integrity_check `('ok',)`: 619 MB persistidos
+- Telegram API: `send_alert returned: True` (drift documentado: cheatsheet decía `alert_info`, no existe → corregido a `send_alert`)
+- /status: `capture_running=True`, `ws_connected=True`, 38 markets, 3 motors False, `trading_enabled=False`, V2 OFF
+
+**Gates pendientes para flippear:**
+- Confirmación de recepción Telegram en cliente (API solo confirma 200, no entrega)
+- SHA de Lección 9 mergeada al `KALSHI_BOT_CONTEXT.md` v1.5
+
 ## Próximos pasos (orden)
-1. (próxima sesión) Mergear Lección 9 al `KALSHI_BOT_CONTEXT.md` v1.5
-2. (próxima sesión) Mergear PR del fix a main si no lo está
-3. (próxima sesión) Revisión sobria del diff (20 min, 3 puntos)
-4. Si revisión limpia → agendar ventana V2 con 2-3h libres confirmadas
-5. Segunda ventana V2 con runbook 12.5 literal otra vez
-6. Si V2 estable a T+2h → desbloquear Motor 1 (paso separado, otra ventana)
-7. Si Opción A falla → pivot a B con scope reajustado (invariantes internas, no cross-validation externa)
+1. Confirmar Telegram recibido + SHA Lección 9
+2. Web Agent flippea `USE_ORDERBOOK_MANAGER_V2: false → true` en Coolify + verifica `MOTOR_1_ARBITRAGE_ENABLED=false` y `TRADING_ENABLED=false` antes de Save
+3. Redeploy + esperar log `OrderbookManagerV2 registered (data-capture only, no Motor 1)`
+4. T+5 a T+30: línea defensiva activa (1 error no-SidGap = rollback inmediato)
+5. T+2h: criterios de éxito runbook literal
+6. Si V2 estable a T+2h → desbloquear Motor 1 (paso separado, otra ventana, otro día)
+7. Si rollback → diagnóstico empírico antes de tercera ventana (NO reintentar inmediatamente)
 
 ## Referencias clave
 - Runbook 12.5 — en `KALSHI_BOT_CONTEXT.md` del repo (v1.5 con Lección 9 pendiente merge)
