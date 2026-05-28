@@ -3,20 +3,33 @@ fecha: 2026-05-26
 tipo: leccion
 proyecto: kalshi-bot
 numero: 9
-estado: canonica-para-repo
+estado: OBSOLETO-no-usar-como-referencia
 target: KALSHI_BOT_CONTEXT.md
 version-doc: 1.5
+reemplazada-por: leccion-9-FINAL-causa-raiz-pendiente
 tags:
   - leccion
   - kalshi-bot
   - post-mortem
-  - runbook
-  - canonica
+  - obsoleto
+  - historia-del-razonamiento
 ---
 
-# Lección 9 — versión canónica para KALSHI_BOT_CONTEXT.md
+# ⚠️ OBSOLETO — Lección 9 borrador del 26-may
 
-> Texto final aprobado para mergear al documento de arquitectura del repo. Estructura paralela a Lecciones 4, 6, 7, 8. Esta es la versión "oficial". Mi versión más conceptual/operativa vive en [[leccion-9-runbook-literal-vs-interpretacion]] como complemento.
+> **ESTE ARCHIVO ES OBSOLETO. NO USAR COMO REFERENCIA TÉCNICA.**
+>
+> Concluía erróneamente que el bug `size=0` era la causa raíz del incidente del 25-may. El attempt #2 del 27-may (ver [[incidente-v2-attempt-2-2026-05-27]]) refutó esa conclusión empíricamente: con el fix aplicado, el bug reapareció a T+2.7s del primer snapshot.
+>
+> **Versión vigente:** [[leccion-9-FINAL-causa-raiz-pendiente]] (committeada al repo con SHA `3a4b384`).
+>
+> Se mantiene este archivo SOLO como historia del razonamiento — para ver cómo evolucionó el diagnóstico y por qué no se debe confiar en una hipótesis no validada en producción. Es ejemplo concreto del anti-patrón **"confianza prematura en un fix no validado en producción"** documentado en la Lección 9 corregida.
+
+---
+
+## Texto original del borrador (preservado para referencia)
+
+> Lo que sigue es lo que se redactó el 26-may, ANTES del attempt #2 que refutó la hipótesis size=0. Mantenido aquí para preservar el contexto del razonamiento.
 
 ---
 

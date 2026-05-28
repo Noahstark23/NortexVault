@@ -1,15 +1,15 @@
 # Proyecto: kalshi-bot
 
 > Fuente consolidada para NotebookLM. Standalone — sin wikilinks no resueltos.
-> Última actualización: 2026-05-27 (pre-flight completo segunda ventana V2, esperando flip).
+> Última actualización: 2026-05-28 (tres frentes abiertos al cierre).
 
 ## Resumen ejecutivo
 Bot automatizado de trading en Kalshi (mercado de eventos). Roadmap por fases:
-- **Fase 1** — Data capture only (V1, operando estable continuamente).
-- **Fase 2** — Motor 1 arbitraje intra-Kalshi (requiere V2 = OrderbookManagerV2 sano. Bug del 25-may corregido en commits `ed7b7ac` + `b9abaa0`. Segunda ventana de activación en pre-flight completo, pendiente gates finales).
+- **Fase 1** — Data capture only (V1). Operando estable AHORA. Tuvo incidente WS zombie (blackout escalonado ~3h) hoy 28-may 05:00-09:00 UTC con recovery fortuito del lado del feed.
+- **Fase 2** — Motor 1 arbitraje intra-Kalshi (requiere V2 = OrderbookManagerV2 sano). **DOS activaciones fallidas:** attempt #1 (25-may, 87 errores, rollback) y attempt #2 (27-may, 12 min, 4 ERROR + 1 CRITICAL, rollback). **Causa raíz NO RESUELTA.** Logs del attempt #2 preservados con stack traces (logging fix funcionó).
 - **Fase 3** — `TRADING_ENABLED=true` (sin tocar hasta Fase 2 cerrada con confianza).
 
-Estado actual al 27-may 15:00 UTC: V1 capturando 38 markets multi-deporte (MLB + UCL + NHL) vía REST + WS, 8h+ healthy hoy, 0 errores. DB en 647 MB con crecimiento consistente. Pre-flight de segunda ventana V2 ejecutado: backup íntegro persistido, Telegram API responde 200, /status saludable. Esperando confirmación de recepción Telegram en cliente + SHA de Lección 9 mergeada al `KALSHI_BOT_CONTEXT.md` v1.5 para flippear `USE_ORDERBOOK_MANAGER_V2=true`.
+Estado actual al 28-may: V1 sano AHORA (Mundo 1 confirmado por análisis estadístico vs baseline 11 días), uptime 24h+ post-rollback attempt #2. V2 dormant detrás de flag. `TRADING_ENABLED=false`, `MOTOR_1_ARBITRAGE_ENABLED=false`. Tres frentes técnicos abiertos: V2 causa raíz (tercer discovery pendiente), V1 WS zombie (ticket capturado, discovery pendiente), Lección 10 (stub).
 
 ## Motivación
 Construir un flujo de ingreso independiente y escalable. Si funciona, deja de depender de un solo canal de ingresos. Aprendizaje aplicable a otros mercados (Polymarket, futuros, opciones).
@@ -172,7 +172,96 @@ Esta decisión es el primer test empírico de Lección 9 aplicada después de re
 ## Métrica de éxito para la segunda ventana
 No solo "no falla" sino **"no falla por la razón que arreglamos"**. Si vuelven a aparecer `qty<0` con magnitudes similares → H1 (bug `size=0`) no era el único bug, reabrir investigación con el raw snapshot logging que el fix ya instaló (cambio 2b).
 
-## Segunda ventana V2 — preparación completa (27-may)
+## V2 attempt #2 EJECUTADO y FALLIDO (27-may 15:36→15:48 UTC)
+
+**Resultado:** rollback en ~12 min, 4 ERROR + 1 CRITICAL en 12 min, **H1 (size=0) REFUTADA empíricamente.**
+
+**Lo que pasó:**
+- 15:36 UTC: flag flippeado, V2 activo
+- T+2.7s del primer snapshot: primer error `KXMLB-26-ATL at 10c: delta produces qty=-3108 < 0`
+- T+3min: gap CRITICAL, 38 tickers stale
+- T+5min: server error de Kalshi `code 15 "Action required"`
+- 15:48 UTC: rollback completado, V2 dormant
+
+**El bug reapareció CON EL FIX APLICADO.** Los tres fixes de Opción A:
+1. ❌ size=0 filter — el bug volvió igual
+2. ❌ seq order swap — contribuyente a contener pero no impidió el origen
+3. ✅ Dispatcher logging fix — funcionó, produjo stack traces completos (vs `NoneType: None` del attempt #1). **Única pieza del fix que cumplió.**
+
+**Logs preservados:** `data/rollback_v2_attempt2_20260527_154809.log` (949 KB)
+
+**Causa raíz arquitectónica validada:** El bot NO crashea ante estos errores. `bot_runs.crash_reason=None` para el run #31 (V2 attempt #2). 12 min de errores, cero crash. Patrón estructural de Lección 7 ("el bot dice que está corriendo" ≠ "el bot está corriendo") aplicado a estado mutable in-memory.
+
+**Pregunta abierta para tercer discovery:** ¿Tenía `KXMLB-26-ATL` price 10c con `size>0` en el snapshot WS inicial? Logs preservados con stack traces tienen la respuesta.
+
+## Lección 9 — committeada en repo (SHA 3a4b384)
+
+**Versión committeada al `KALSHI_BOT_CONTEXT.md` v1.5:**
+- Título: "Lección 9 (Mayo 25-27, 2026): Dos activaciones fallidas de V2, dos diagnósticos prematuros, contención disciplinada en ambas"
+- **Estado de causa raíz: NO RESUELTA al cierre de esta entrada** (prominente al inicio)
+- Cubre AMBOS attempts (25 y 27-may)
+- Tabla "Diagnóstico afirmó vs realidad mostró" — 3 diagnósticos fallidos consecutivos
+- 5 decisiones derivadas, 4 anti-patrones, sección "Lo que sí funcionó"
+
+**Diferencia central con el borrador anterior (26-may, OBSOLETO):**
+- Borrador viejo: "encontramos la causa vía discovery" (size=0)
+- Versión final: "creímos haberla encontrado dos veces y nos equivocamos las dos veces, pero el sistema de contención nos protegió en ambas"
+- Tono crudo intencional para prevenir confirmation bias en tercer discovery
+
+**Anti-patrones confirmados en esta Lección 9:**
+1. Atribución externa sin discovery propio primero ("es el feed")
+2. Confianza prematura en un fix no validado en producción ("size=0 era la causa")
+3. Interpretar criterios de runbook con discreción en mitad de incidente
+4. Urgencia de roadmap como motor de decisión técnica (en proyecto solo-founder sin capital trabajando)
+
+## Incidente V1 — WS zombie / blackout escalonado (28-may)
+
+Detectado al revisar `/status` el día post-rollback. `last_error="WS zombie: connected but no messages for 1475s"` con timestamp 08:59:59 UTC.
+
+**Investigación con 5 queries empíricas:**
+1. Confirmó zombie REAL de ~24 min (08:36-08:59)
+2. Barrido 24h reveló blackout ESCALONADO de ~3h (05:00-09:00)
+3. Comparación 4 días refutó hipótesis de valle de mercado US-Eastern
+4. Comparación 13-16 UTC × 12 días confirmó: V1 sano AHORA (Mundo 1)
+5. Detectó 18-may posible microblackout silencioso similar
+
+**Throughput orderbook_events por hora 28-may UTC:**
+```
+04h: 13.470 (OK)
+05h: 6.275 (caída -50%)
+06h: 7.018 (degradado)
+07h: 454 (blackout -98%)
+08h: 9 (blackout total)
+09h: 7.576 (recovery, burst 115/309/79/238/116/min)
+10h+: normalizado
+```
+
+**Capas que fallaron:**
+- **Watchdog:** ciego al WS por diseño, solo monitorea `capture_running` (REST mantuvo flag en True)
+- **`BotState.ws_connected`:** se setea True al entrar al contexto, solo se limpia en `finally`. Socket TCP nunca arrojó excepción → flag mintió 3h
+- **`/status`:** calcula passive metric, NINGÚN componente activo del bot la lee
+- **Detector zombie:** sí marcó `last_error` pero NO escala a `risk_events`, NO alerta Telegram, NO fuerza reconexión
+
+**Esto es regresión parcial de la defensa de Lección 7** (post-blackout de 11h del 13-14 may). Material para Lección 10 (post-discovery).
+
+**Logs disponibles:** Coolify mantiene logs del container mientras viva. `bot_runs.crash_reason=None`, sin reinicios.
+
+## Tres frentes abiertos al cierre
+
+| Frente | Severidad | Bloqueante para | Próximo paso |
+|---|---|---|---|
+| V2 causa raíz | Alta (post-mortem) | Toda activación futura de Motor 1 | Tercer discovery con logs del attempt #2 |
+| V1 WS zombie | Alta (post-mortem, no urgente) | Confiabilidad data capture | Discovery read-only de `kalshi_ws.py` + `monitoring/` |
+| Lección 10 | Stub | Documentación arquitectónica | Llenar post-discovery V1 |
+
+## Decisión disciplinada del 28-may: parar HOY
+
+- Llevo 3+ días intensos en frente V2, y 1 día más con incidente V1
+- Discovery de código async/concurrencia cansado = leer mal
+- V1 sano ahora, sin capital, sin urgencia
+- No tocar código hoy, retomar con cabeza fresca
+
+## Segunda ventana V2 — preparación completa (27-may, contexto previo)
 
 **Revisión sobria del diff (cerrada limpia):**
 - `b9abaa0` confirmado como format/tests sin cambios funcionales
