@@ -1,15 +1,15 @@
 # Proyecto: kalshi-bot
 
 > Fuente consolidada para NotebookLM. Standalone — sin wikilinks no resueltos.
-> Última actualización: 2026-05-28 (tres frentes abiertos al cierre).
+> Última actualización: 2026-05-29 (frente V1 cerrado + V2 con H1 refutada).
 
 ## Resumen ejecutivo
 Bot automatizado de trading en Kalshi (mercado de eventos). Roadmap por fases:
-- **Fase 1** — Data capture only (V1). Operando estable AHORA. Tuvo incidente WS zombie (blackout escalonado ~3h) hoy 28-may 05:00-09:00 UTC con recovery fortuito del lado del feed.
-- **Fase 2** — Motor 1 arbitraje intra-Kalshi (requiere V2 = OrderbookManagerV2 sano). **DOS activaciones fallidas:** attempt #1 (25-may, 87 errores, rollback) y attempt #2 (27-may, 12 min, 4 ERROR + 1 CRITICAL, rollback). **Causa raíz NO RESUELTA.** Logs del attempt #2 preservados con stack traces (logging fix funcionó).
+- **Fase 1** — Data capture only (V1). **Sano y endurecido.** Fix watchdog mergeado (commit `21fe6fd`) y validado 7h 14min en producción sin huecos. Frente WS zombie del 28-may CERRADO LIMPIO.
+- **Fase 2** — Motor 1 arbitraje intra-Kalshi (requiere V2 = OrderbookManagerV2 sano). **Dos activaciones fallidas + tercer discovery completado.** H1 (size=0 filter) REFUTADA empíricamente por forense del log preservado attempt #2 (bucket 10c tenía size>0 en ambos lados). Pivot a H2/H3/H4 (dispatcher/ordering/parsing). NO se reactiva V2 sin causa raíz validada nueva.
 - **Fase 3** — `TRADING_ENABLED=true` (sin tocar hasta Fase 2 cerrada con confianza).
 
-Estado actual al 28-may: V1 sano AHORA (Mundo 1 confirmado por análisis estadístico vs baseline 11 días), uptime 24h+ post-rollback attempt #2. V2 dormant detrás de flag. `TRADING_ENABLED=false`, `MOTOR_1_ARBITRAGE_ENABLED=false`. Tres frentes técnicos abiertos: V2 causa raíz (tercer discovery pendiente), V1 WS zombie (ticket capturado, discovery pendiente), Lección 10 (stub).
+Estado al 29-may: V1 sano y endurecido (watchdog activo, force_reconnect funcional, alertas Telegram en threshold). V2 dormant con espacio de hipótesis acotado. Lección 9 committeada (SHA `3a4b384`). Lección 10 lista para commit. Sin capital en riesgo. Sin urgencia operativa.
 
 ## Motivación
 Construir un flujo de ingreso independiente y escalable. Si funciona, deja de depender de un solo canal de ingresos. Aprendizaje aplicable a otros mercados (Polymarket, futuros, opciones).
@@ -260,6 +260,99 @@ Detectado al revisar `/status` el día post-rollback. `last_error="WS zombie: co
 - Discovery de código async/concurrencia cansado = leer mal
 - V1 sano ahora, sin capital, sin urgencia
 - No tocar código hoy, retomar con cabeza fresca
+
+## 29-may — Fix V1 mergeado + validado 7h + tercer discovery V2
+
+### Fix V1 watchdog implementado (commit `21fe6fd`)
+Tres cambios sobre los 3 bugs firmes del discovery:
+1. **`force_reconnect()`** — cierra socket sin tocar `_running`. Loop exterior reconecta naturalmente.
+2. **Watchdog reactor** — cuando silence > 300s: incrementa contador, `record_error`, `force_reconnect`, alerta Telegram tras 2 detecciones.
+3. **`LAST_ERROR_TTL_SEC = 900.0`** — TTL con `current_error()` que expira/limpia.
+
+Suite verde, 4 tests nuevos incluyendo integración real contra socket. PR mergeado a main, Coolify deploy.
+
+### Validación 7h 14min en producción
+```
+TOTAL POSTDEPLOY: 161.169 eventos en 7h 14min
+RANGO: 06:13:34 → 13:28:17 UTC
+MINUTOS CONTINUOS CON DATA: 435 de 435
+MINUTOS_MISSING: 0   ✓
+```
+- 0 `force_reconnect` espurios
+- 0 zombie detecciones
+- Throughput dentro del baseline sano (5k-56k/h)
+- **Hora 08h: 6.831 eventos** (mismo valor que destruyó el 28-may) → **valle natural** seguido de pico 09h (37k) y 10h (56k). Misma cifra, significados opuestos.
+
+**Frente WS V1 CERRADO LIMPIO.** Esta vez la validación es REAL — 7h de producción, no "tests verdes" como en V2.
+
+### Tercer discovery V2 — H1 REFUTADA empíricamente
+Forense surgical del log preservado `data/rollback_v2_attempt2_20260527_154809.log`:
+
+**Pregunta:** ¿El price 10c de KXMLB-26-ATL tenía size>0 en el snapshot WS inicial?
+
+**Respuesta del log (líneas 7703-7704):**
+- YES side, 10c: `1114.07` (~1114 cents)
+- NO side, 10c: `500.00` (~500 cents)
+- **size > 0 en AMBOS lados**
+
+**H1 (size=0 filter) REFUTADA como causa.** El bucket tenía estado válido. El delta llegó a un orderbook con valores legítimos y aun así produjo `qty=-3108`.
+
+### Hallazgos extra del forense
+- No hubo deltas previos al ticker entre snapshot y error
+- Error coincidió con gap de sequence (`expected seq=40, got 41`) 2ms después
+- Triggering delta side AMBIGUO — log no captura delta crudo, solo resultado
+- Magnitud inferida del delta: ~-4222 (YES) o ~-3608 (NO)
+
+### Pivot V2 — nuevo espacio de hipótesis
+**Abandonar variantes de size=0.** Buscar en:
+- **H2:** Dispatcher / aplicación de deltas defectuosa (¿cómo apply_delta computa qty<0 sobre size válido?)
+- **H3:** Ordenamiento / out-of-order (gap seq=40 es señal fuerte de delta fuera de orden)
+- **H4:** Interpretación del snapshot (¿shape de parseo de `yes_dollars_fp` correcto?)
+
+NO tocar producción. NO escribir fix. Próximo discovery enfocado a estas hipótesis cuando se retome el frente V2.
+
+### Lección 10 redactada (causa cerrada, fix validado)
+
+**Estado de causa raíz: VALIDADA** — silencio aplicativo de feed externo con TCP vivo, sin detector de aplicación en V1.
+
+**Decisiones derivadas (5):**
+1. Detección de silencio aplicativo es obligatoria cuando se tiene loop sin timeout
+2. Métricas calculadas que nadie consume son anti-patrón
+3. Defensas de lecciones anteriores deben validarse al agregar código nuevo
+4. `last_error` debe tener TTL o stickiness explícita
+5. Atribución externa requiere refutar hipótesis internas con discovery arquitectónico
+
+**Anti-patrones confirmados:**
+- "Dashboard sin actuador" (métricas que no se consumen)
+- "Defensa de lección previa que regresó silenciosamente" (regresión Lección 7)
+- "Decoupling que oculta fallas" (REST ocultó WS muerto)
+- "Atribución externa por eliminación de hipótesis internas"
+
+Pendiente: commit al `KALSHI_BOT_CONTEXT.md` v1.6 (contenido listo).
+
+## Estado consolidado al cierre del 29-may
+
+| Frente | Estado |
+|---|---|
+| V1 WS zombie | ✅ CERRADO LIMPIO (fix validado 7h) |
+| Lección 10 | ✅ Redactada, pendiente commit administrativo |
+| V2 causa raíz | 🔄 Pivot a H2/H3/H4, próximo discovery cuando se retome |
+| Capital | 🔒 Cero — `TRADING_ENABLED=false`, sin urgencia |
+
+## Patrones meta validados los últimos 4 días
+
+1. **Validación en producción ≠ tests verdes.** V2 attempts: tests verdes, falla en prod. V1 watchdog: tests verdes + 7h prod = cierre real.
+2. **Atribución externa requiere refutar hipótesis internas con discovery arquitectónico.** "REST estable → externa" no prueba sin saber acoplamiento de loops.
+3. **Logs preservados de incidentes pasados son insumo de validación.** El forense V2 refutó H1 sin re-activar V2.
+4. **Trabajo de cabeza fresca > trabajo maratónico cansado.** Discovery surgical del log V2 salió en una sola pasada porque arranqué descansado.
+
+## Próximos pasos (no urgentes)
+
+1. Commit administrativo Lección 10 al repo (`KALSHI_BOT_CONTEXT.md` v1.6)
+2. Próximo discovery V2 (H2/H3/H4 contra logs preservados, NO tocar prod, NO escribir fix)
+3. Fase 2 watchdog V1 (detector de tasa con baseline por hora) — diseño cuando aplique
+4. Unificación de las dos señales `ws_connected`
+5. Test de causa externa vs starvation interna (cuestión técnica abierta)
 
 ## Segunda ventana V2 — preparación completa (27-may, contexto previo)
 

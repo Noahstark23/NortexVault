@@ -3,19 +3,29 @@ fecha: 2026-05-28
 tipo: leccion
 proyecto: kalshi-bot
 numero: 10
-estado: stub-pendiente-discovery
-target: KALSHI_BOT_CONTEXT.md (post-discovery)
+estado: SUPERADO-ver-version-FINAL
+reemplazado-por: leccion-10-FINAL-ws-zombie-con-fix-validado
 tags:
   - leccion
   - kalshi-bot
   - ws-zombie
   - stub
-  - pendiente
+  - superado
 ---
 
-# Lección 10 (stub) — WS zombie / regresión defensa Lección 7
+# ⚠️ STUB SUPERADO — Lección 10 borrador del 28-may
 
-> **Stub pendiente de completar.** Esperando discovery read-only de `kalshi_ws.py` + `monitoring/`. NO redactar hasta que el ticket [[ticket-v1-ws-zombie-degradacion-escalonada]] esté investigado y el fix definido.
+> **ESTE ARCHIVO ES STUB ORIGINAL. Versión FINAL en [[leccion-10-FINAL-ws-zombie-con-fix-validado]].**
+>
+> Se mantiene como **historia del razonamiento** — útil para ver cómo evolucionó desde "tengo un síntoma" hasta "tengo causa cerrada y fix validado en producción".
+>
+> Diferencia con la final: la final tiene causa raíz cerrada (silencio aplicativo con TCP vivo), fix `21fe6fd` implementado, **7h 14min de validación en producción**, y texto listo para mergear al `KALSHI_BOT_CONTEXT.md` v1.6.
+
+---
+
+## Stub original — preservado para referencia
+
+> Lo que sigue es el stub redactado el 28-may, cuando aún no había discovery ni fix. Mantenido como historia del proceso.
 
 ## Lo que ya sabemos (preservar al cerrar la lección)
 
