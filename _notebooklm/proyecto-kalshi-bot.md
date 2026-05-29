@@ -1,15 +1,15 @@
 # Proyecto: kalshi-bot
 
 > Fuente consolidada para NotebookLM. Standalone — sin wikilinks no resueltos.
-> Última actualización: 2026-05-29 (frente V1 cerrado + V2 con H1 refutada).
+> Última actualización: 2026-05-30 (frente V1 cerrado + V2 con cuarto discovery + instrumentación preparada).
 
 ## Resumen ejecutivo
 Bot automatizado de trading en Kalshi (mercado de eventos). Roadmap por fases:
 - **Fase 1** — Data capture only (V1). **Sano y endurecido.** Fix watchdog mergeado (commit `21fe6fd`) y validado 7h 14min en producción sin huecos. Frente WS zombie del 28-may CERRADO LIMPIO.
-- **Fase 2** — Motor 1 arbitraje intra-Kalshi (requiere V2 = OrderbookManagerV2 sano). **Dos activaciones fallidas + tercer discovery completado.** H1 (size=0 filter) REFUTADA empíricamente por forense del log preservado attempt #2 (bucket 10c tenía size>0 en ambos lados). Pivot a H2/H3/H4 (dispatcher/ordering/parsing). NO se reactiva V2 sin causa raíz validada nueva.
+- **Fase 2** — Motor 1 arbitraje intra-Kalshi (requiere V2 = OrderbookManagerV2 sano). **Dos activaciones fallidas + cuatro discoveries.** H1 (size=0 filter) REFUTADA empíricamente. Cuarto discovery confirma: parsing limpio en ambos paths, gap seq=40 era artefacto del manejo de error, 3 dominios de seq coexistiendo. **V2 NO está exculpado:** parsing limpio ≠ V2 limpio. **3 hipótesis vivas A/B/C, causa raíz sigue ABIERTA.** Plan: instrumentación asimétrica en branch PR #2 (snapshot DEBUG full + delta ERROR on failure), tercera ventana de activación DESACOPLADA.
 - **Fase 3** — `TRADING_ENABLED=true` (sin tocar hasta Fase 2 cerrada con confianza).
 
-Estado al 29-may: V1 sano y endurecido (watchdog activo, force_reconnect funcional, alertas Telegram en threshold). V2 dormant con espacio de hipótesis acotado. Lección 9 committeada (SHA `3a4b384`). Lección 10 lista para commit. Sin capital en riesgo. Sin urgencia operativa.
+Estado al 30-may: V1 sano (PR #1 watchdog mergeable). V2 dormant con instrumentación preparada (PR #2 pendiente crear). Lección 9 en repo (SHA `3a4b384`) + update redactado para PR #2. Lección 10 lista. Sin capital en riesgo. Sin urgencia operativa.
 
 ## Motivación
 Construir un flujo de ingreso independiente y escalable. Si funciona, deja de depender de un solo canal de ingresos. Aprendizaje aplicable a otros mercados (Polymarket, futuros, opciones).
@@ -348,11 +348,87 @@ Pendiente: commit al `KALSHI_BOT_CONTEXT.md` v1.6 (contenido listo).
 
 ## Próximos pasos (no urgentes)
 
-1. Commit administrativo Lección 10 al repo (`KALSHI_BOT_CONTEXT.md` v1.6)
-2. Próximo discovery V2 (H2/H3/H4 contra logs preservados, NO tocar prod, NO escribir fix)
-3. Fase 2 watchdog V1 (detector de tasa con baseline por hora) — diseño cuando aplique
-4. Unificación de las dos señales `ws_connected`
-5. Test de causa externa vs starvation interna (cuestión técnica abierta)
+## 30-may — Cuarto discovery V2 + correcciones + plan instrumentación
+
+### Cuarto discovery: tres correcciones a hallazgos del 29-may
+
+**Corrección 1 — "Gap seq=40" era ARTEFACTO, no señal independiente.** Código probó (`orderbook_manager_v2.py:159-174`): cuando `_apply_delta_msg` lanza `OrderbookDesyncError`, `self._last_seq_by_sid[sid]` no avanza (línea 174 condicional). El siguiente mensaje con seq=41 produce "expected 40, got 41". El gap es efecto colateral del crash, no señal de mensaje perdido. **Message-loss eliminado como causa.**
+
+**Corrección 2 — "El bucket estaba en 1114 al momento del delta" era overreach.** `_apply_delta_msg` no loggea aplicaciones exitosas. Entre snapshot (seq=2) y error (seq=40), 37 deltas no logueados. **Estado del bucket pre-delta es punto ciego.** Inferencia "delta = -4222" no establecida.
+
+**Corrección 3 — 3 dominios de seq coexistentes** (batch snapshot index, Sid global del WS, per-delta seq del feed). Código NO mezcla dominios incorrectamente, pero **amplifica blast radius**: un crash dispara `_start_recovery(sid)` marcando 38 tickers stale.
+
+### Comparación lado a lado parsing snapshot vs delta
+
+| Punto | Snapshot | Delta | ¿Idéntico? |
+|---|---|---|---|
+| Conversión precio→cents | `parse_price_to_cents()` | `parse_price_to_cents()` | ✅ Misma función |
+| Conversión size→int | `parse_size()` | `parse_size()` | ✅ Misma función |
+| Filtro `size==0` | SÍ (dos veces) | NO | ⚠️ Asimetría latente |
+| Side handling | yes/no separados | side del msg | ✅ Consistente |
+| Routing | Solo bids | Solo bids | ✅ Consistente |
+
+**Parsing limpio.** No hay mismatch lógico que explique `qty=-3108` partiendo de bucket 1114 o 500.
+
+**Pero filtro size=0 asimétrico NO aplica al caso ATL** (su bucket tenía 1114/500, no cero). Queda como bug latente catalogado.
+
+### Sesgo hardcodeado encontrado
+`orderbook.py:65`: `"new_qty < 0 indicates feed-level corruption"`. La excepción se llama literal `(feed corruption)`. **El código pre-juzga causa externa.** Diagnósticos futuros se contaminan con esa palabra antes de pensar. Eliminación pendiente para Opción A2/B.
+
+### Anti-patrón cazado en tiempo real
+Claude Code y Gemini concluyeron: *"V2 exculpado, indiscutiblemente es el feed."*
+
+Lección 9 enseña a desconfiar de "indiscutiblemente". Discovery probó **parsing limpio, NO V2 limpio**. Hay 3 hipótesis vivas:
+- **(A)** Feed corruption real
+- **(B)** Snapshot inicial parcial — bucket real en exchange divergía del cargado por V2
+- **(C)** Bug de V2 en ventana 2.7s entre snapshot y crash — deltas no logueados dejaron bucket divergente
+
+**B y C NO son atribuibles al feed.** Concluir "es el feed" sería **atribución externa redux** — el mismo anti-patrón del 25-may en forma más sofisticada.
+
+Capa adversarial cazó la trampa: **V2 NO ESTÁ EXCULPADO.** Causa raíz sigue ABIERTA.
+
+### Plan: instrumentación asimétrica antes de tercera ventana
+
+**Branch PR #2 nueva** (separada del PR #1 watchdog):
+- Update Lección 9 al `KALSHI_BOT_CONTEXT.md` (párrafo redactado)
+- `_apply_snapshot_msg`: `logger.debug` con `raw_msg` completo (sin truncar a 3 levels)
+- `_apply_delta_msg`: try/except + `logger.error` con `raw_msg` + bucket state defensivo + re-raise idéntico
+
+**Por qué asimétrico:**
+- Snapshot DEBUG (1 por ticker en bootstrap, no inunda; útil para hipótesis B)
+- Delta ERROR (solo cuando crashea, se persiste con LOG_LEVEL=INFO — el mismo fix del 25-may para evitar `NoneType: None`)
+
+**Acceso defensivo al bucket:** usar `state` ya en scope + `.get(price)` + bloque de logging envuelto en su propio try/except. Sin esto, un `KeyError` enmascararía el `OrderbookDesyncError` original.
+
+**Verificación previa obligatoria:** Claude Code debe confirmar estado actual del try/except antes de escribir (patrón del 27-may con `logger.opt`).
+
+### Tercera ventana V2 — DESACOPLADA
+
+La instrumentación es **preparación**, no activación. La cámara queda apagada hasta la tercera ventana.
+
+**La tercera ventana es decisión de GESTIÓN** (cuando haya 2-3h continuas), **NO siguiente paso técnico**. Lección 9: "La urgencia de sprint es un fantasma en proyecto solo-founder sin capital trabajando."
+
+Después de mergear PR #2: NO encadenar activación. Cierre de sesión.
+
+## Estado consolidado al cierre 30-may
+
+| Frente | Estado |
+|---|---|
+| V1 WS zombie | ✅ CERRADO (PR #1 mergeable) |
+| Lección 10 | ✅ Redactada (commit administrativo pendiente) |
+| V2 cuatro discoveries | ✅ Cerrado en su límite informacional |
+| V2 instrumentación | 🔵 PREPARADA (brief + update + decisión branch) |
+| V2 tercera ventana | 🔒 DESACOPLADA (decisión de gestión) |
+| Capital | 🔒 Cero |
+
+## Próximos pasos (no urgentes)
+
+1. Mergear PR #1 (watchdog V1) — validación 7h ya completa
+2. Commit administrativo Lección 10 al repo
+3. Crear branch PR #2 — pasar brief con texto del update **explícito** (no asumir contexto)
+4. Revisar diff PR #2 contra 7 criterios
+5. Si limpio → merge PR #2. V2 sellado y preparado.
+6. Cierre disciplinado. Tercera ventana en otra sesión.
 
 ## Segunda ventana V2 — preparación completa (27-may, contexto previo)
 

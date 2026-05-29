@@ -19,20 +19,22 @@ Bot de trading en Kalshi operando de forma autónoma con edge positivo verificab
 ## Por qué importa
 Ingreso independiente y escalable. Si funciona, runway deja de depender de un solo flujo. Aprendizaje aplicable a otros mercados.
 
-## Estado actual (2026-05-29, frente V1 CERRADO + V2 pivot)
+## Estado actual (2026-05-30, frente V1 cerrado + V2 con instrumentación PREPARADA)
 
 ### Fases del roadmap
-- **Fase 1 (data capture):** ✅ V1 **SANO Y ENDURECIDO**. Fix watchdog mergeado (commit `21fe6fd`) y **validado 7h 14min en producción sin huecos** (161k events / 435 minutos consecutivos). El bug del 28-may queda estructuralmente cerrado.
-- **Fase 2 (Motor 1 arbitraje):** 🔄 **CAUSA RAÍZ V2 — pivot del espacio de hipótesis.** H1 (size=0 filter) REFUTADA empíricamente por forense del log del attempt #2 (bucket 10c tenía size>0 en ambos lados). Nuevo espacio: H2 (dispatcher), H3 (ordering / out-of-order), H4 (parsing del snapshot). NO se reactiva V2.
+- **Fase 1 (data capture):** ✅ V1 sano y endurecido. Fix watchdog `21fe6fd` validado 7h en producción. PR #1 mergeable.
+- **Fase 2 (Motor 1 arbitraje):** 🔵 **CUARTO discovery completado.** Parsing limpio en ambos paths (snapshot=delta), gap=artefacto refutado como señal independiente, 3 dominios de seq coexistiendo, **V2 NO exculpado** (parsing limpio ≠ V2 limpio). 3 hipótesis residuales vivas: (A) feed real, (B) snapshot parcial, (C) bug en aplicación de deltas. **Plan: instrumentar antes de tercera ventana.**
 - **Fase 3 (trading):** 🔒 `TRADING_ENABLED=false`, `MOTOR_1_ARBITRAGE_ENABLED=false`. No tocar hasta Fase 2 cerrada.
 
 ### Frentes al cierre del día
 
 | Frente | Estado |
 |---|---|
-| **V1 WS zombie** | ✅ **CERRADO LIMPIO** — fix validado 7h en producción |
-| **Lección 10** | ✅ Redactada con causa cerrada — pendiente commit administrativo al repo |
-| **V2 causa raíz** | 🔄 **Pivot a H2/H3/H4** — discovery sobre dispatcher/ordering/parsing cuando se retome |
+| **V1 WS zombie** | ✅ **CERRADO LIMPIO** — PR #1 watchdog mergeable, validación 7h ya completa |
+| **Lección 10** | ✅ Redactada — pendiente commit administrativo al repo (puede ir con PR #1 o aparte) |
+| **V2 cuarto discovery** | ✅ Cerrado — parsing limpio probado, V2 NO exculpado |
+| **V2 instrumentación + Lección 9 update** | 🔵 **PREPARADO** — brief listo + texto update + branch PR #2 (pendiente crear) |
+| **V2 tercera ventana de activación** | 🔒 **DESACOPLADA** — decisión de gestión, NO siguiente paso técnico |
 | Capital | 🔒 Cero — `TRADING_ENABLED=false`, sin urgencia operativa |
 
 ### Métricas operativas
@@ -58,28 +60,47 @@ Ingreso independiente y escalable. Si funciona, runway deja de depender de un so
 - [x] **Tercer discovery V2 (29-may)** — forense del log preservado → [[discovery-forense-v2-attempt2-h1-refutada]]
 - [x] **H1 (size=0) REFUTADA empíricamente** — bucket 10c tenía size>0 en ambos lados (YES=1114.07, NO=500.00)
 - [x] **Pivot V2:** decisión de abandonar variantes de size=0, ir a H2/H3/H4 → [[decision-2026-05-29-v2-pivot-nuevo-espacio-hipotesis]]
+- [x] **Cuarto discovery V2 (30-may)** — cruce log + código fuente → [[cuarto-discovery-v2-parsing-limpio-tres-dominios-seq]]
+- [x] **Corrección hallazgo previo:** gap seq=40 era ARTEFACTO del manejo de error, no señal independiente
+- [x] **Corrección hallazgo previo:** estado del bucket pre-delta es punto ciego (apply_delta no loggea exitosos)
+- [x] **3 dominios de seq identificados** (batch index, Sid global, per-delta) — código no comete error obvio pero amplifica blast radius
+- [x] **Parsing comparado lado a lado** — idéntico en snapshot y delta, filtro size=0 asimétrico pero no aplica a ATL
+- [x] **Anti-patrón cazado en tiempo real:** "indiscutiblemente es el feed" como atribución externa redux → corregido a "V2 NO exculpado, 3 hipótesis vivas A/B/C"
+- [x] **Sesgo hardcodeado documentado:** `orderbook.py:65` dice "indicates feed-level corruption" — pre-juzga causa externa
+- [x] **Update Lección 9 redactado** → [[update-leccion-9-29may-tercer-discovery-cerrado]]
+- [x] **Decisión branch separada** → [[decision-2026-05-30-branch-separada-v2-instrumentacion-asimetrica]]
+- [x] **Brief instrumentación asimétrica corregido** (snapshot DEBUG full, delta ERROR, defensivo, verificación previa) → [[brief-instrumentacion-v2-asymmetric-logging]]
 
-### Pendiente (no urgente, cuando se retome)
+### Pendiente (orden estricto, ninguno urgente)
 
-**Administrativo:**
-- [ ] Commit Lección 10 al `KALSHI_BOT_CONTEXT.md` v1.6 (contenido listo en [[leccion-10-FINAL-ws-zombie-con-fix-validado]])
+**Hoy o pronto:**
+- [ ] Mergear PR #1 (watchdog V1) — validación 7h ya completa
+- [ ] Commit administrativo Lección 10 al `KALSHI_BOT_CONTEXT.md` v1.6 (con PR #1 o aparte)
+- [ ] Crear branch PR #2 (V2 instrumentación + Lección 9 update)
+- [ ] Pasar brief a Claude Code para PR #2 — IMPORTANTE: pasar el texto del update explícito (no asumir contexto)
+- [ ] Revisar diff PR #2 contra 7 criterios de aceptación → ver [[brief-instrumentacion-v2-asymmetric-logging]]
+- [ ] Si limpio → merge PR #2 — frente V2 queda preparado y dormant
 
-**Frente V2 (siguiente vez que se trabaje el roadmap a Motor 1):**
-- [ ] Discovery sobre `_apply_delta_msg` enfocado a H2 (¿cómo apply_delta procesa delta negativo grande sobre size válido?)
-- [ ] Análisis de deltas entre seq=2 y seq=39 en log preservado — ¿algún otro también produjo error?
-- [ ] Investigar shape de parseo de `yes_dollars_fp` — H4 (¿unidad esperada?)
-- [ ] El gap de seq=40 es señal fuerte de H3 — discovery sobre handling de out-of-order
-- [ ] NO escribir fix sin causa raíz validada contra log preservado (Lección 9 #1)
-- [ ] Decisión A2 (parche puntual sobre H2/H3/H4) vs B (rediseño) — depende del discovery
+**Frente V2 — Tercera ventana de activación (decisión de gestión, OTRA sesión):**
+- [ ] Agendar 2-3h continuas para supervisión activa
+- [ ] Runbook 12.5 literal otra vez + adiciones Lección 9 (línea defensiva T+5→T+30)
+- [ ] Con instrumentación activa: capturar raw_msg del próximo crash
+- [ ] Desambiguar A (feed) / B (snapshot parcial) / C (bug aplicación deltas)
+- [ ] Si causa identificada → diseñar fix definitivo (Opción A2 puntual o B rediseño)
 
-**Deuda técnica V1 (mejoras, no bloqueante):**
-- [ ] Fase 2 watchdog: detector de tasa con baseline por hora (Fase 1 ya da auto-recuperación)
-- [ ] Unificación de las dos señales `ws_connected` (consolidar Señal A → message-based)
-- [ ] Test causa externa vs starvation interna (cuestión técnica abierta)
+**Frente V2 — Deuda separada (post-causa raíz):**
+- [ ] Eliminar `(feed corruption)` hardcodeado en `orderbook.py:65` — sesgo de atribución externa
+- [ ] Reducir blast radius del cascade Sid-wide (38 tickers stale por crash de 1)
+- [ ] Cubrir asimetría del filtro size=0 en deltas — bug latente
+
+**Deuda V1 (mejoras, no bloqueante):**
+- [ ] Fase 2 watchdog: detector de tasa con baseline por hora
+- [ ] Unificación de las dos señales `ws_connected`
+- [ ] Test causa externa vs starvation interna
 - [ ] Latencia detección actual ~10-15 min worst case → mejorable
 
-**Deuda catalogada general:**
-- [ ] Política de retención DB (~90 GB/año proyectado) + VACUUM mensual vía cron
+**Deuda general:**
+- [ ] Política de retención DB (~90 GB/año proyectado) + VACUUM mensual
 - [ ] Investigar ticker drift (40→39→38 sin reemplazo)
 - [ ] Hardening defensivo de `parse_price_to_cents` (validar rango [0,100])
 
@@ -88,11 +109,13 @@ Ingreso independiente y escalable. Si funciona, runway deja de depender de un so
 - [[decision-2026-05-25-fix-opcion-a]] — fix puntual size=0 (hipótesis válida en su momento, después refutada)
 - [[decision-2026-05-26-no-reactivar-hoy]] — pacing disciplinado
 - [[decision-2026-05-27-activar-v2-segunda-ventana]] — segunda ventana (resultado: attempt #2 falló)
-- [[decision-2026-05-29-v2-pivot-nuevo-espacio-hipotesis]] — **abandonar variantes de size=0, pivot a H2/H3/H4**
+- [[decision-2026-05-29-v2-pivot-nuevo-espacio-hipotesis]] — abandonar variantes de size=0
+- [[decision-2026-05-30-branch-separada-v2-instrumentacion-asimetrica]] — **branch separada para PR #2, instrumentación asimétrica**
 
-## Diagnósticos clave
-- [[diagnostico-v2-size-zero-bug]] — diagnóstico H1 (26-may). **REFUTADO** por forense (29-may). Historia.
-- [[discovery-forense-v2-attempt2-h1-refutada]] — forense del log preservado, evidencia binaria que refuta H1
+## Diagnósticos y discoveries
+- [[diagnostico-v2-size-zero-bug]] — H1 original (26-may). **REFUTADO.** Historia.
+- [[discovery-forense-v2-attempt2-h1-refutada]] — tercer discovery (29-may), binario sobre H1
+- [[cuarto-discovery-v2-parsing-limpio-tres-dominios-seq]] — **cuarto discovery (30-may)**, cruce log + código. Parsing limpio probado, V2 NO exculpado, 3 hipótesis vivas A/B/C, gap=artefacto.
 
 ## Validaciones técnicas
 - [[inspeccion-apply-snapshot-msg-paths-excepcion]] — swap seq/apply protege ambos paths (delta y snapshot), apply_snapshot atómica. **Sigue válida arquitectónicamente** aunque el fix no resolvió el bug primario.
@@ -113,11 +136,15 @@ Ingreso independiente y escalable. Si funciona, runway deja de depender de un so
 - [[cheatsheet-runbook-12.5-v2-activacion]] — runbook 12.5 + adiciones Lección 9. **Validado en 2 rollbacks limpios.**
 
 ## Lecciones aprendidas
-- [[leccion-9-FINAL-causa-raiz-pendiente]] — **versión FINAL** en repo (SHA `3a4b384`). Causa V2 NO RESUELTA. H1 ahora refutada empíricamente.
+- [[leccion-9-FINAL-causa-raiz-pendiente]] — **versión FINAL** en repo (SHA `3a4b384`). Causa V2 NO RESUELTA. H1 refutada empíricamente.
+- [[update-leccion-9-29may-tercer-discovery-cerrado]] — **UPDATE redactado** para mergear en PR #2 (branch V2)
 - [[leccion-10-FINAL-ws-zombie-con-fix-validado]] — **versión FINAL** lista para commit v1.6. Causa cerrada + fix validado 7h.
-- [[leccion-9-runbook-literal-vs-interpretacion]] — versión operativa/conceptual (complementaria, sigue vigente)
+- [[leccion-9-runbook-literal-vs-interpretacion]] — versión operativa/conceptual (complementaria)
 - [[leccion-9-canonica-kalshi-bot-context-md]] — ⚠️ **OBSOLETA** (historia del razonamiento)
 - [[leccion-10-ws-zombie-pendiente-discovery]] — ⚠️ **STUB SUPERADO** (historia del razonamiento)
+
+## Briefs operativos reusables
+- [[brief-instrumentacion-v2-asymmetric-logging]] — brief para Claude Code: instrumentación V2 asimétrica (snapshot DEBUG full, delta ERROR on failure, defensivo, verificación previa)
 
 ## Sesiones documentadas
 - [[sesion-2026-05-24-setup-git-fase2]] — setup de Obsidian Git (vault infra)
@@ -174,3 +201,6 @@ Ingreso independiente y escalable. Si funciona, runway deja de depender de un so
 - **2026-05-29 ~06:13 UTC** — PR fix V1 watchdog mergeado (commit `21fe6fd`), Coolify deploy.
 - **2026-05-29 ~13:28 UTC** — Validación 7h 14min: 161k events, 435/435 minutos sin huecos, 0 force_reconnect espurios, 0 zombies. **Frente WS V1 CERRADO LIMPIO.**
 - **2026-05-29 mañana fresca** — Tercer discovery V2 ejecutado sobre log preservado. Pregunta binaria. **H1 (size=0) REFUTADA empíricamente:** bucket 10c tenía size>0 (YES=1114.07, NO=500.00). Decisión de pivot a H2/H3/H4. Cierre del día con frente V1 efectivamente terminado y frente V2 con espacio acotado.
+- **2026-05-30 mañana** — Cuarto discovery V2: cruce log + código fuente real. Tres correcciones a hallazgos del 29: (1) gap seq=40 es artefacto del manejo de error, no señal independiente; (2) estado bucket pre-delta es punto ciego (no logueado); (3) 3 dominios de seq coexistentes. Comparación lado a lado parsing snapshot vs delta = idéntico. Filtro size=0 asimétrico pero no aplica a ATL.
+- **2026-05-30** — **Anti-patrón "indiscutiblemente es el feed" CAZADO en tiempo real.** Claude Code/Gemini concluyeron "V2 exculpado" — corregido por capa adversarial. **V2 NO está exculpado:** parsing limpio ≠ V2 limpio. Tres hipótesis vivas A (feed), B (snapshot parcial), C (apply en ventana no logueada).
+- **2026-05-30** — Update Lección 9 redactado. Decisión branch separada (PR #1 watchdog vs PR #2 V2 instrumentación + update). Brief instrumentación corregido: asimétrico (snapshot DEBUG full, delta ERROR), acceso defensivo a bucket, verificación previa obligatoria. **Tercera ventana V2 explícitamente DESACOPLADA** (decisión de gestión, no técnica).
