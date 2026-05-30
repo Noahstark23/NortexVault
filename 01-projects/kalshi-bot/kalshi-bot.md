@@ -19,22 +19,26 @@ Bot de trading en Kalshi operando de forma autónoma con edge positivo verificab
 ## Por qué importa
 Ingreso independiente y escalable. Si funciona, runway deja de depender de un solo flujo. Aprendizaje aplicable a otros mercados.
 
-## Estado actual (2026-05-30, frente V1 cerrado + V2 con instrumentación PREPARADA)
+## Estado actual (2026-05-30 noche, V1 CERRADO + V2 con CAUSA RAÍZ CAPTURADA 🎯)
 
 ### Fases del roadmap
-- **Fase 1 (data capture):** ✅ V1 sano y endurecido. Fix watchdog `21fe6fd` validado 7h en producción. PR #1 mergeable.
-- **Fase 2 (Motor 1 arbitraje):** 🔵 **CUARTO discovery completado.** Parsing limpio en ambos paths (snapshot=delta), gap=artefacto refutado como señal independiente, 3 dominios de seq coexistiendo, **V2 NO exculpado** (parsing limpio ≠ V2 limpio). 3 hipótesis residuales vivas: (A) feed real, (B) snapshot parcial, (C) bug en aplicación de deltas. **Plan: instrumentar antes de tercera ventana.**
+- **Fase 1 (data capture):** ✅ V1 sano y endurecido. Fix watchdog mergeado a prod (commit `b52a052`, branch `claude/nifty-darwin-2s7wm`). Validado 7h+ en producción. **CERRADO.**
+- **Fase 2 (Motor 1 arbitraje):** 🎯 **CAUSA RAÍZ V2 CAPTURADA en attempt #3.** PR #2 instrumentación asimétrica mergeado y aplicado. Tercera activación falló a T+37s pero **el smoking gun quedó preservado**: `msg_seq=186 state_seq=184 delta_size=-13 bucket_qty_pre_delta=2` → desync de secuencia en bootstrap, NO es feed corruption. Hipótesis C confirmada, A y B descartadas. **Próximo paso: cuarto discovery del log preservado + diseñar fix.**
 - **Fase 3 (trading):** 🔒 `TRADING_ENABLED=false`, `MOTOR_1_ARBITRAGE_ENABLED=false`. No tocar hasta Fase 2 cerrada.
 
 ### Frentes al cierre del día
 
 | Frente | Estado |
 |---|---|
-| **V1 WS zombie** | ✅ **CERRADO LIMPIO** — PR #1 watchdog mergeable, validación 7h ya completa |
-| **Lección 10** | ✅ Redactada — pendiente commit administrativo al repo (puede ir con PR #1 o aparte) |
-| **V2 cuarto discovery** | ✅ Cerrado — parsing limpio probado, V2 NO exculpado |
-| **V2 instrumentación + Lección 9 update** | 🔵 **PREPARADO** — brief listo + texto update + branch PR #2 (pendiente crear) |
-| **V2 tercera ventana de activación** | 🔒 **DESACOPLADA** — decisión de gestión, NO siguiente paso técnico |
+| **V1 WS zombie** | ✅ **CERRADO LIMPIO** — watchdog en prod (commit `b52a052`), 7h+ sin force_reconnect espurio |
+| **Lección 10** | ✅ Redactada — pendiente decisión versión (corta vs completa) + commit a PR #2 |
+| **V2 cuatro discoveries** | ✅ Cerrados — parsing limpio + 3 dominios + sesgo hardcodeado documentados |
+| **V2 instrumentación (PR #2)** | ✅ **MERGEADO** — instrumentación asimétrica + update Lección 9 #1 + branch `claude/v2-desync-logging` |
+| **V2 attempt #3 ejecutado** | ✅ **CAPTURÓ CAUSA RAÍZ** — log preservado `data/v2_attempt3_20260530_174849.log` (29 KB) |
+| **Update Lección 9 #2 (causa identificada)** | ✅ Redactado — pendiente commit |
+| **Cuarto discovery V2** | ⏳ Pendiente (analizar log capturado: por qué V2 no bufferó seq=185, por qué recovery no convergió) |
+| **Diseño fix de bootstrap/gap-handling** | ⏳ Post-cuarto discovery |
+| **Cuarta ventana V2** | 🔒 DESACOPLADA — solo después de fix validado |
 | Capital | 🔒 Cero — `TRADING_ENABLED=false`, sin urgencia operativa |
 
 ### Métricas operativas
@@ -70,23 +74,35 @@ Ingreso independiente y escalable. Si funciona, runway deja de depender de un so
 - [x] **Update Lección 9 redactado** → [[update-leccion-9-29may-tercer-discovery-cerrado]]
 - [x] **Decisión branch separada** → [[decision-2026-05-30-branch-separada-v2-instrumentacion-asimetrica]]
 - [x] **Brief instrumentación asimétrica corregido** (snapshot DEBUG full, delta ERROR, defensivo, verificación previa) → [[brief-instrumentacion-v2-asymmetric-logging]]
+- [x] **30-may tarde: Watchdog V1 mergeado a producción** (PR #1 → commit `b52a052`)
+- [x] **30-may tarde: PR #2 mergeado** (instrumentación V2 + update Lección 9 #1)
+- [x] **30-may 17:41 UTC: Tercera ventana V2 ejecutada con runbook 12.5 literal**
+- [x] **🎯 CAUSA RAÍZ V2 CAPTURADA** — smoking gun: `msg_seq=186 state_seq=184 delta=-13 bucket=2` → [[causa-raiz-v2-desync-secuencia-bootstrap-CAPTURADA]]
+- [x] **Hipótesis C (gap/recovery handling en bootstrap) CONFIRMADA con evidencia dura**
+- [x] **Hipótesis A (feed) y B (snapshot parcial) DESCARTADAS empíricamente**
+- [x] **Rollback attempt #3 ejecutado <5min** sin daño operativo → [[incidente-v2-attempt-3-2026-05-30-causa-capturada]]
+- [x] **Log preservado:** `data/v2_attempt3_20260530_174849.log` (29 KB, 390 líneas)
+- [x] **Update Lección 9 #2 redactado** (causa identificada) → [[update-leccion-9-v2-causa-raiz-resuelta-30may]]
+- [x] **Pre-flight completo por 1ª vez** con los 4 ✅ (backup íntegro + flags por nombre + Telegram en cliente + código verificado en vivo)
+- [x] **Corrección de seguridad al runbook:** `printenv VAR1 VAR2` por nombre, NO env dump (expondría secrets)
 
 ### Pendiente (orden estricto, ninguno urgente)
 
-**Hoy o pronto:**
-- [ ] Mergear PR #1 (watchdog V1) — validación 7h ya completa
-- [ ] Commit administrativo Lección 10 al `KALSHI_BOT_CONTEXT.md` v1.6 (con PR #1 o aparte)
-- [ ] Crear branch PR #2 (V2 instrumentación + Lección 9 update)
-- [ ] Pasar brief a Claude Code para PR #2 — IMPORTANTE: pasar el texto del update explícito (no asumir contexto)
-- [ ] Revisar diff PR #2 contra 7 criterios de aceptación → ver [[brief-instrumentacion-v2-asymmetric-logging]]
-- [ ] Si limpio → merge PR #2 — frente V2 queda preparado y dormant
+**Próxima sesión (cuando esté con cabeza fresca, no urgente):**
+- [ ] **Cuarto discovery V2** — analizar `data/v2_attempt3_20260530_174849.log`
+  - Q1: ¿por qué V2 no bufferó el seq=185? El código tiene buffer en `handle_message:166` pero no se llenó. Hipótesis a contrastar: (C1) buffer no se llena en bootstrap, (C2) race condition snapshot apply vs delta processing, (C3) gap detection antes de inicializar `_last_seq_by_sid`.
+  - Q2: ¿por qué el recovery no convergió? `books_initialized: 0` a T+6min. Hipótesis: Kalshi `code 15` interrumpió, recovery loop con bug, o cascada genera más mensajes que recovery puede drenar.
+- [ ] **Diseñar fix de bootstrap/gap-handling** (post-cuarto discovery)
+- [ ] **Eliminar texto `"(feed corruption)"`** hardcodeado en `orderbook.py:65` — sesgo confirmado erróneo
+- [ ] **Commit update Lección 9 #2** al `KALSHI_BOT_CONTEXT.md` v1.7
+- [ ] **Decidir versión de Lección 10** (corta vs completa) + commit
+- [ ] Test fix offline contra escenario reproducido (seq=184 → seq=186 sin 185)
 
-**Frente V2 — Tercera ventana de activación (decisión de gestión, OTRA sesión):**
+**Frente V2 — Cuarta ventana de activación (post-fix validado):**
 - [ ] Agendar 2-3h continuas para supervisión activa
-- [ ] Runbook 12.5 literal otra vez + adiciones Lección 9 (línea defensiva T+5→T+30)
-- [ ] Con instrumentación activa: capturar raw_msg del próximo crash
-- [ ] Desambiguar A (feed) / B (snapshot parcial) / C (bug aplicación deltas)
-- [ ] Si causa identificada → diseñar fix definitivo (Opción A2 puntual o B rediseño)
+- [ ] Runbook 12.5 literal otra vez + línea defensiva T+5→T+30
+- [ ] Métrica de éxito: NO reaparece patrón `msg_seq=N+2 state_seq=N` durante bootstrap
+- [ ] Si V2 estable a T+2h → desbloquear Motor 1 (paso separado, otra ventana)
 
 **Frente V2 — Deuda separada (post-causa raíz):**
 - [ ] Eliminar `(feed corruption)` hardcodeado en `orderbook.py:65` — sesgo de atribución externa
@@ -106,16 +122,22 @@ Ingreso independiente y escalable. Si funciona, runway deja de depender de un so
 
 ## Decisiones tomadas
 - [[decision-2026-05-25-rollback-v2]] — rollback V2 attempt #1
-- [[decision-2026-05-25-fix-opcion-a]] — fix puntual size=0 (hipótesis válida en su momento, después refutada)
+- [[decision-2026-05-25-fix-opcion-a]] — fix puntual size=0 (hipótesis refutada)
 - [[decision-2026-05-26-no-reactivar-hoy]] — pacing disciplinado
-- [[decision-2026-05-27-activar-v2-segunda-ventana]] — segunda ventana (resultado: attempt #2 falló)
+- [[decision-2026-05-27-activar-v2-segunda-ventana]] — segunda ventana (attempt #2 falló)
 - [[decision-2026-05-29-v2-pivot-nuevo-espacio-hipotesis]] — abandonar variantes de size=0
-- [[decision-2026-05-30-branch-separada-v2-instrumentacion-asimetrica]] — **branch separada para PR #2, instrumentación asimétrica**
+- [[decision-2026-05-30-branch-separada-v2-instrumentacion-asimetrica]] — branch separada PR #2
 
-## Diagnósticos y discoveries
+## Diagnósticos y discoveries (V2)
 - [[diagnostico-v2-size-zero-bug]] — H1 original (26-may). **REFUTADO.** Historia.
 - [[discovery-forense-v2-attempt2-h1-refutada]] — tercer discovery (29-may), binario sobre H1
-- [[cuarto-discovery-v2-parsing-limpio-tres-dominios-seq]] — **cuarto discovery (30-may)**, cruce log + código. Parsing limpio probado, V2 NO exculpado, 3 hipótesis vivas A/B/C, gap=artefacto.
+- [[cuarto-discovery-v2-parsing-limpio-tres-dominios-seq]] — cuarto discovery (30-may mañana), parsing limpio + 3 dominios + sesgo hardcodeado
+- [[causa-raiz-v2-desync-secuencia-bootstrap-CAPTURADA]] — **🎯 CAUSA RAÍZ CAPTURADA** por attempt #3 (30-may tarde). Smoking gun. C confirmada, A/B descartadas.
+
+## Incidentes V2 (tres rollbacks limpios)
+- [[sesion-2026-05-25-v2-activacion-y-rollback]] — attempt #1
+- [[incidente-v2-attempt-2-2026-05-27]] — attempt #2
+- [[incidente-v2-attempt-3-2026-05-30-causa-capturada]] — **attempt #3 — el que capturó la causa**
 
 ## Validaciones técnicas
 - [[inspeccion-apply-snapshot-msg-paths-excepcion]] — swap seq/apply protege ambos paths (delta y snapshot), apply_snapshot atómica. **Sigue válida arquitectónicamente** aunque el fix no resolvió el bug primario.
@@ -136,12 +158,13 @@ Ingreso independiente y escalable. Si funciona, runway deja de depender de un so
 - [[cheatsheet-runbook-12.5-v2-activacion]] — runbook 12.5 + adiciones Lección 9. **Validado en 2 rollbacks limpios.**
 
 ## Lecciones aprendidas
-- [[leccion-9-FINAL-causa-raiz-pendiente]] — **versión FINAL** en repo (SHA `3a4b384`). Causa V2 NO RESUELTA. H1 refutada empíricamente.
-- [[update-leccion-9-29may-tercer-discovery-cerrado]] — **UPDATE redactado** para mergear en PR #2 (branch V2)
-- [[leccion-10-FINAL-ws-zombie-con-fix-validado]] — **versión FINAL** lista para commit v1.6. Causa cerrada + fix validado 7h.
+- [[leccion-9-FINAL-causa-raiz-pendiente]] — **versión FINAL en repo** (SHA `3a4b384`). Base.
+- [[update-leccion-9-29may-tercer-discovery-cerrado]] — **UPDATE #1** (parsing limpio, A/B/C abiertas) — mergeado en PR #2
+- [[update-leccion-9-v2-causa-raiz-resuelta-30may]] — **UPDATE #2** (causa CAPTURADA en attempt #3) — pendiente commit, va al v1.7
+- [[leccion-10-FINAL-ws-zombie-con-fix-validado]] — Lección 10 FINAL. Watchdog mergeado a prod, validado 7h+.
 - [[leccion-9-runbook-literal-vs-interpretacion]] — versión operativa/conceptual (complementaria)
-- [[leccion-9-canonica-kalshi-bot-context-md]] — ⚠️ **OBSOLETA** (historia del razonamiento)
-- [[leccion-10-ws-zombie-pendiente-discovery]] — ⚠️ **STUB SUPERADO** (historia del razonamiento)
+- [[leccion-9-canonica-kalshi-bot-context-md]] — ⚠️ OBSOLETA (historia)
+- [[leccion-10-ws-zombie-pendiente-discovery]] — ⚠️ STUB SUPERADO (historia)
 
 ## Briefs operativos reusables
 - [[brief-instrumentacion-v2-asymmetric-logging]] — brief para Claude Code: instrumentación V2 asimétrica (snapshot DEBUG full, delta ERROR on failure, defensivo, verificación previa)
@@ -203,4 +226,10 @@ Ingreso independiente y escalable. Si funciona, runway deja de depender de un so
 - **2026-05-29 mañana fresca** — Tercer discovery V2 ejecutado sobre log preservado. Pregunta binaria. **H1 (size=0) REFUTADA empíricamente:** bucket 10c tenía size>0 (YES=1114.07, NO=500.00). Decisión de pivot a H2/H3/H4. Cierre del día con frente V1 efectivamente terminado y frente V2 con espacio acotado.
 - **2026-05-30 mañana** — Cuarto discovery V2: cruce log + código fuente real. Tres correcciones a hallazgos del 29: (1) gap seq=40 es artefacto del manejo de error, no señal independiente; (2) estado bucket pre-delta es punto ciego (no logueado); (3) 3 dominios de seq coexistentes. Comparación lado a lado parsing snapshot vs delta = idéntico. Filtro size=0 asimétrico pero no aplica a ATL.
 - **2026-05-30** — **Anti-patrón "indiscutiblemente es el feed" CAZADO en tiempo real.** Claude Code/Gemini concluyeron "V2 exculpado" — corregido por capa adversarial. **V2 NO está exculpado:** parsing limpio ≠ V2 limpio. Tres hipótesis vivas A (feed), B (snapshot parcial), C (apply en ventana no logueada).
-- **2026-05-30** — Update Lección 9 redactado. Decisión branch separada (PR #1 watchdog vs PR #2 V2 instrumentación + update). Brief instrumentación corregido: asimétrico (snapshot DEBUG full, delta ERROR), acceso defensivo a bucket, verificación previa obligatoria. **Tercera ventana V2 explícitamente DESACOPLADA** (decisión de gestión, no técnica).
+- **2026-05-30 mañana** — Update Lección 9 redactado. Decisión branch separada (PR #1 watchdog vs PR #2 V2 instrumentación + update). Brief instrumentación corregido: asimétrico (snapshot DEBUG full, delta ERROR), acceso defensivo a bucket, verificación previa obligatoria.
+- **2026-05-30 tarde** — PR #1 mergeado → commit `b52a052` → watchdog en producción, validado 7h+. PR #2 mergeado (instrumentación + update Lección 9 #1). **Tercera ventana V2 ejecutada** con runbook 12.5 literal + pre-flight completo por 1ª vez con los 4 ✅.
+- **2026-05-30 17:41:01 UTC** — Activación V2 attempt #3.
+- **2026-05-30 17:41:08 UTC (T+37s)** — **🎯 PRIMER ERROR captura CAUSA RAÍZ:** `msg_seq=186 state_seq=184 side=yes price_cents=3 delta_size=-13 bucket_qty_pre_delta=2` en KXMLB-26-PHI. El feed entregó secuencia consecutiva, V2 saltó el seq=185. **NO es feed corruption. Es desync interno de V2 en bootstrap.**
+- **2026-05-30 17:41:08+** — Cascada: Sid 1 gap → `_start_recovery` (37 tickers stale) → Kalshi `code 15`. Recovery no convergió a T+6min.
+- **2026-05-30 ~17:47 UTC** — Rollback ejecutado <5min. V1 baseline sano. **Logs preservados** en `data/v2_attempt3_20260530_174849.log` (29 KB).
+- **2026-05-30 noche** — Update Lección 9 #2 redactado. **Estado de causa raíz V2: pasa de NO RESUELTA a IDENTIFICADA (C confirmada, A/B descartadas).** Cuatro discoveries cerrados. Cuarto discovery (sobre log preservado) pendiente — para determinar mecanismo exacto antes de diseñar fix.

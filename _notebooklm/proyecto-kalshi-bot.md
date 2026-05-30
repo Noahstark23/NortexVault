@@ -1,15 +1,17 @@
 # Proyecto: kalshi-bot
 
 > Fuente consolidada para NotebookLM. Standalone — sin wikilinks no resueltos.
-> Última actualización: 2026-05-30 (frente V1 cerrado + V2 con cuarto discovery + instrumentación preparada).
+> Última actualización: 2026-05-30 noche (V1 cerrado + V2 CAUSA RAÍZ CAPTURADA).
 
 ## Resumen ejecutivo
 Bot automatizado de trading en Kalshi (mercado de eventos). Roadmap por fases:
-- **Fase 1** — Data capture only (V1). **Sano y endurecido.** Fix watchdog mergeado (commit `21fe6fd`) y validado 7h 14min en producción sin huecos. Frente WS zombie del 28-may CERRADO LIMPIO.
-- **Fase 2** — Motor 1 arbitraje intra-Kalshi (requiere V2 = OrderbookManagerV2 sano). **Dos activaciones fallidas + cuatro discoveries.** H1 (size=0 filter) REFUTADA empíricamente. Cuarto discovery confirma: parsing limpio en ambos paths, gap seq=40 era artefacto del manejo de error, 3 dominios de seq coexistiendo. **V2 NO está exculpado:** parsing limpio ≠ V2 limpio. **3 hipótesis vivas A/B/C, causa raíz sigue ABIERTA.** Plan: instrumentación asimétrica en branch PR #2 (snapshot DEBUG full + delta ERROR on failure), tercera ventana de activación DESACOPLADA.
+- **Fase 1** — Data capture only (V1). **Sano y endurecido.** Fix watchdog mergeado a producción (commit `b52a052`, branch `claude/nifty-darwin-2s7wm`) y validado 7h+ en producción. Cero force_reconnect espurios. Frente WS zombie del 28-may CERRADO LIMPIO.
+- **Fase 2** — Motor 1 arbitraje intra-Kalshi (requiere V2 = OrderbookManagerV2 sano). **Tres activaciones fallidas + cuatro discoveries + tercera con CAUSA RAÍZ CAPTURADA.** PR #2 mergeado con instrumentación asimétrica. Attempt #3 (30-may 17:41 UTC) falló a T+37s en bootstrap pero **el `raw_msg` quedó preservado**: `msg_seq=186 state_seq=184 delta=-13 bucket=2` → V2 saltó el seq=185 → desync interno, **NO feed corruption**. Hipótesis C confirmada con evidencia dura. Hipótesis A (feed) y B (snapshot parcial) descartadas. Pendiente: cuarto discovery sobre log preservado + diseño del fix de bootstrap/gap-handling.
 - **Fase 3** — `TRADING_ENABLED=true` (sin tocar hasta Fase 2 cerrada con confianza).
 
-Estado al 30-may: V1 sano (PR #1 watchdog mergeable). V2 dormant con instrumentación preparada (PR #2 pendiente crear). Lección 9 en repo (SHA `3a4b384`) + update redactado para PR #2. Lección 10 lista. Sin capital en riesgo. Sin urgencia operativa.
+Estado al 30-may noche: V1 en prod sano. V2 dormant con causa raíz CONFIRMADA. Lección 9 en repo (SHA `3a4b384`) + update #1 mergeado en PR #2 + update #2 redactado pendiente commit. Lección 10 lista. Sin capital en riesgo. Sin urgencia operativa.
+
+**El frente V2 pasó de "causa desconocida" a "causa identificada, fix pendiente".**
 
 ## Motivación
 Construir un flujo de ingreso independiente y escalable. Si funciona, deja de depender de un solo canal de ingresos. Aprendizaje aplicable a otros mercados (Polymarket, futuros, opciones).
@@ -423,12 +425,106 @@ Después de mergear PR #2: NO encadenar activación. Cierre de sesión.
 
 ## Próximos pasos (no urgentes)
 
-1. Mergear PR #1 (watchdog V1) — validación 7h ya completa
-2. Commit administrativo Lección 10 al repo
-3. Crear branch PR #2 — pasar brief con texto del update **explícito** (no asumir contexto)
-4. Revisar diff PR #2 contra 7 criterios
-5. Si limpio → merge PR #2. V2 sellado y preparado.
-6. Cierre disciplinado. Tercera ventana en otra sesión.
+## 30-may TARDE — Watchdog en prod + V2 attempt #3 CAUSA RAÍZ CAPTURADA 🎯
+
+### Watchdog V1 → producción
+- PR #1 (`claude/nifty-darwin-2s7wm`) mergeado → commit `b52a052` → deploy.
+- Validación: 7h+ sin force_reconnect espurio, sin tracebacks post-deploy, throughput continuo.
+- Frente WS V1 cerrado limpio.
+
+### Tercera ventana V2 (17:41 UTC) — capturó causa raíz
+Pre-flight completo por primera vez con los 4 ✅:
+- Backup íntegro (`integrity=ok`)
+- Flags por nombre (`printenv VAR1 VAR2`, NO env dump — corrección de seguridad al runbook para no exponer `KALSHI_API_KEY_ID`, `TELEGRAM_BOT_TOKEN`)
+- Telegram confirmado **EN EL CLIENTE** (no solo `sent=True` de la API)
+- Código verificado en vivo (no por commit message)
+
+**Activación:** 17:41:01 UTC, USE_ORDERBOOK_MANAGER_V2 false→true.
+
+### SMOKING GUN (log capturado por la instrumentación del PR #2)
+
+```
+msg_seq=186 state_seq=184 side=yes price_cents=3 delta_size=-13 bucket_qty_pre_delta=2
+```
+
+- Bot interno en seq=184
+- Llega delta seq=186
+- **Falta el seq=185**
+- V2 aplica directo: 2 + (-13) = -11 → OrderbookDesyncError
+- Ticker: KXMLB-26-PHI a 3¢
+- Tiempo desde activación: T+37 segundos
+
+**El feed entregó secuencia válida y consecutiva (184 → 185 → 186). V2 saltó el 185 durante bootstrap.**
+
+### Hipótesis: estado final tras attempt #3
+
+| Hipótesis | Estado |
+|---|---|
+| (A) Feed corruption real | ❌ DESCARTADA — feed entregó secuencia consecutiva |
+| (B) Snapshot inicial parcial | ❌ DESCARTADA — bug en manejo de gap, no en snapshot |
+| (C) Bug interno V2 en gap/recovery en bootstrap | ✅ **CONFIRMADA con evidencia dura** |
+
+### Cascada del incidente
+- 17:41:08 — primer error (KXMLB-26-PHI)
+- 17:41:08 — Sid 1 gap detected → `_start_recovery` → 37 tickers stale
+- 17:41:0X — Kalshi `code 15 "Action required"`
+- 17:47:XX — `books_initialized: 0` a T+6min, recovery NO convergió
+- 17:47:XX — Rollback ejecutado <5min, V1 baseline sano
+
+### Logs preservados
+- `data/v2_attempt3_20260530_174849.log` (29 KB, 390 líneas)
+- En volumen Docker persistente, sobrevive restarts
+- Contiene `raw_msg` pre-corrupción, cadena completa de error, `_start_recovery`, `/status`
+
+### Sesgo hardcodeado de `orderbook.py:65` confirmado erróneo
+El código dice: `"new_qty < 0 indicates feed-level corruption"`. El attempt #3 prueba que es desync interno, NO feed. El label `"(feed corruption)"` encubrió la causa real durante 5 días. **Acción derivada:** eliminarlo en el fix definitivo.
+
+### Comparación los 3 attempts
+
+| Atributo | #1 (25-may) | #2 (27-may) | #3 (30-may) |
+|---|---|---|---|
+| Duración pre-crash | ~5 min | ~12 min | **~37 segundos** |
+| Stack traces | `NoneType: None` (perdidos) | Completos | **Completos + `raw_msg`** |
+| Causa identificada en su momento | "feed corruption" (falsa) | "size=0" (falsa) | **"desync interno" (confirmada)** |
+| Resultado neto | Rollback limpio | Rollback + logging fix valida | **Rollback + CAUSA CAPTURADA** |
+
+**Tendencia:** cada attempt crashea más rápido pero captura más información.
+
+### Decisiones tomadas durante la ventana
+
+1. Rollback al primer error en T+37s sin esperar línea defensiva T+30min (regla literal del runbook).
+2. NO escribir fix hoy. Cuarto discovery primero, otra sesión.
+3. PR #2 cumplió su propósito y puede mergearse limpio.
+4. Sesión cerrada disciplinadamente post-rollback.
+
+## Estado del frente V2 al cierre del 30-may noche
+
+- ✅ Causa raíz IDENTIFICADA (desync de secuencia en bootstrap)
+- ✅ Hipótesis C confirmada con evidencia
+- ✅ A y B descartadas
+- ✅ PR #2 cumplió su propósito (instrumentación + Lección 9 update #1 mergeados)
+- ⏳ Cuarto discovery pendiente para entender mecanismo exacto
+- ⏳ Diseño fix de bootstrap/gap-handling post-discovery
+- 🔒 V2 sigue dormant
+- 🔒 Cuarta ventana = decisión de gestión separada (solo post fix validado)
+
+## Meta-aprendizajes validados
+
+1. **La instrumentación pagó.** 25-may volamos a ciegas (`NoneType: None`). 30-may el `raw_msg` en ERROR resolvió en una ventana lo que 4 discoveries no pudieron.
+2. **"Capturar es ganar"** — V2 falló pero la ventana fue éxito porque salió con evidencia.
+3. **Sistema de contención funciona en todas las capas** — agentes frenaron solos ante backup colgado y arranque "no verde".
+4. **Pre-flight literal por primera vez** con los 4 ✅. Sin atajos.
+5. **Lección 9 "atribución externa requiere refutar internas"** — sin esa disciplina, attempt #3 hubiera ido a buscar variantes del feed y se hubiera perdido la causa.
+
+## Próximos pasos (no urgentes, en orden)
+
+1. Cuarto discovery sobre log preservado
+2. Diseñar fix de bootstrap/gap-handling
+3. Test fix offline (escenario reproducido: seq=184 → seq=186 sin 185)
+4. Commit update Lección 9 #2 al `KALSHI_BOT_CONTEXT.md` v1.7
+5. Commit Lección 10 al `KALSHI_BOT_CONTEXT.md`
+6. Cuarta ventana V2 (post-fix validado, decisión separada)
+7. Si V2 estable a T+2h → desbloquear Motor 1 (paso separado)
 
 ## Segunda ventana V2 — preparación completa (27-may, contexto previo)
 
