@@ -1,7 +1,9 @@
 # Proyecto: kalshi-bot
 
 > Fuente consolidada para NotebookLM. Standalone — sin wikilinks no resueltos.
-> Última actualización: 2026-05-30 noche (V1 cerrado + V2 CAUSA RAÍZ CAPTURADA).
+> **Última actualización: 2026-05-31** — incluye corrección al diagnóstico del 30-may.
+>
+> **📅 PARA NOTEBOOKLM:** este documento incluye actualizaciones en orden cronológico. Las secciones más recientes están al final, marcadas con `**🗓️ AGREGADO 2026-05-XX**`. Cuando re-subas a NotebookLM, lo más nuevo siempre tiene fecha visible.
 
 ## Resumen ejecutivo
 Bot automatizado de trading en Kalshi (mercado de eventos). Roadmap por fases:
@@ -525,6 +527,114 @@ El código dice: `"new_qty < 0 indicates feed-level corruption"`. El attempt #3 
 5. Commit Lección 10 al `KALSHI_BOT_CONTEXT.md`
 6. Cuarta ventana V2 (post-fix validado, decisión separada)
 7. Si V2 estable a T+2h → desbloquear Motor 1 (paso separado)
+
+---
+
+## 🗓️ AGREGADO 2026-05-31 — Cuarto discovery + correcciones + misterio Part A
+
+### Status V1 (31-may 15:11 UTC): SANO 21.3h continuas
+
+Bot lleva **21.3 horas sin un solo error** desde el rollback del attempt #3 (30-may 17:54 UTC). `last_error: null`, `ws_connected: True`, 37 markets tracked, todos los motores off.
+
+**Validación retroactiva de la decisión de rollback del 30-may.** Comparación:
+- V2 attempt #1: rollback ~25 min (87 errores)
+- V2 attempt #2: rollback ~12 min (4 ERROR + 1 CRITICAL)
+- V2 attempt #3: rollback ~6 min (1 OrderbookDesyncError)
+- V1 baseline post-rollback: **21.3h sin errores**
+
+V1 lleva más tiempo limpio que la suma de las 3 ventanas V2 combinadas.
+
+### 🔧 CORRECCIÓN al diagnóstico del 30-may
+
+**Lo que decíamos el 30-may (parcialmente mal):**
+> *"V2 saltó el seq=185, Kalshi entregó secuencia consecutiva 184→185→186."*
+
+**Lo que el código muestra (31-may):**
+El `seq` es **global-por-sid**, NO por-ticker (orderbook.py:265-268). Que PHI vaya de 184 → 186 NO significa que falte el 185 globalmente. **El 185 fue casi con certeza un delta de OTRO ticker del mismo sid.** A nivel por-ticker, los huecos son normales — no hay contigüidad por-ticker.
+
+**La causa real (más simple, más grave):**
+Durante el bootstrap, V2 NO tenía ni buffering ni detección de gap:
+1. **Buffering gateado por recovery:** `if sid in self._recovering:` — pero `_recovering` solo se puebla post-gap-detection. **Durante bootstrap está vacío.**
+2. **Detección de gap requiere key inicializada:** `if sid in self._last_seq_by_sid:` — antes del primer apply exitoso, esa key no existe. **No hay rama `else` → los primeros mensajes saltean detección de gap por completo.**
+
+**Resultado:** V2 empezaba a aplicar deltas apenas llegaba el primer snapshot, sin sincronización. Los deltas pre-snapshot (válidos) se descartaban silenciosamente con `logger.warning("...skipping"); return`. **Book sub-construido → `qty<0`.**
+
+El `qty=-11` no vino de delta corrupto ni gap real — vino de aplicar un delta válido sobre un book al que le faltaban actualizaciones que se tiraron a la basura durante el arranque.
+
+### Q3 — La bomba activa: recovery sin convergencia
+
+**Segundo bug independiente y más grave que sigue activo en main:**
+
+El recovery solo sale de `_recovering` cuando llegan snapshots de TODOS los tickers. **No hay timeout. No hay retry. No hay limpieza ante error.**
+
+Si Kalshi responde `code 15` al `get_snapshot` masivo:
+- Ningún recovery snapshot vuelve
+- `_recovering` queda atrapado permanentemente
+- Todos los deltas se bufferean indefinidamente
+- Books nunca se re-inicializan → `books_initialized: 0`
+- **V2 muerto silenciosamente**
+
+**Es Lección 7 (WS zombie) en otra capa** — bot reporta "healthy" pero los books no se actualizan.
+
+### 🚨 MISTERIO Part A
+
+Durante el cuarto discovery (31-may), Claude Code mencionó dos veces que "Part A ya está mergeada" — un fix de bootstrap buffering en commit `49231da`.
+
+**El usuario no recuerda haber aprobado ni revisado ese fix.** Si está en main sin review, viola toda la disciplina del workflow (gates de Lección 9).
+
+**Acción pendiente antes de cualquier paso de Part B:** verificar `commit 49231da`. Si existe → auditoría retroactiva. Si no → aclarar de dónde sacó Claude Code la idea.
+
+### Brief Part B (recovery robusto) — diseño aprobado con 3 verificaciones
+
+**Cierra el bug Q3** (recovery sin convergencia). Diseño aprobado por capa adversarial:
+
+| Hueco | Solución (Opción B) |
+|---|---|
+| ¿`code 15` es snapshot o sesión? | **Circuit breaker de conexión** — reusa `force_reconnect()` del watchdog. Eviction por ticker solo para timeouts locales |
+| "Modo pasivo" indefinido | **Degradación a V1** — destruir book in-memory pero seguir captura REST/SQLite. Reset 00:00 UTC |
+| Cap de buffer | **1000 mensajes** — evict por tamaño O tiempo |
+
+**3 verificaciones obligatorias para el brief de implementación:**
+1. ¿`force_reconnect()` re-autentica o solo re-socket? (Verificar en código antes de implementar)
+2. Descarte silencioso ante `_books[ticker]=None` (sin AttributeError)
+3. Cap de 1000 calibrable, NO valor sagrado
+
+**Encuadre central:** Part B implementada ≠ V2 listo. Aún con A+B mergeadas, V2 sigue dormant. **Falta cuarta ventana de activación** para validar en vivo. Tests unitarios cubren timeout pero no `code 15` real ni dinámica de bootstrap en prod.
+
+### Anti-patrones cazados HOY (31-may)
+
+1. **"Falta el seq=185 a nivel ticker"** — atribución sin validar contra código. Era global-por-sid. Yo (Claude) lo cometí ayer.
+2. **"Part A ya mergeada"** sin review adversarial — bug de proceso.
+3. **"Implementar A+B en una corrida"** — Gemini intentó mezclar diseño + implementación.
+4. **Recordatorio del Lección 9:** la atribución técnica también necesita capa adversarial. Caí en framing apresurado en algo sutil hoy (seq global vs por-ticker). El sistema funcionó: Claude Code lo corrigió desde código.
+
+### Estado consolidado al 31-may
+
+| Frente | Estado |
+|---|---|
+| V1 baseline | ✅ SANO 21.3h continuas |
+| Watchdog V1 | ✅ En prod (`b52a052`) |
+| Cuarto discovery V2 | ✅ Cerrado desde código (Q1-Q4) |
+| Diagnóstico 30-may | ⚠️ CORREGIDO el 31-may |
+| Causa real V2 (Q2) | ✅ Ventana ciega de bootstrap |
+| Bomba activa (Q3) | ⚠️ Recovery sin convergencia |
+| MISTERIO Part A | ⏳ Pendiente verificar `49231da` |
+| Diseño Part B | ✅ Aprobado con 3 verificaciones |
+| Implementación Part B | 🔒 BLOQUEADA hasta resolver Part A |
+| Cuarta ventana V2 | 🔒 DESACOPLADA |
+| Capital | 🔒 Cero |
+
+### Próximos pasos (orden estricto, ninguno urgente)
+
+1. **Resolver misterio Part A** (`commit 49231da`)
+2. Si Part A confirmada: auditoría retroactiva del diff
+3. Claude Code verifica re-auth en `run()` (Verificación 1)
+4. Consolidar brief definitivo Part B con verificaciones cerradas
+5. Brief definitivo → review adversarial otra vez
+6. Implementar Part B (separado, con review del diff)
+7. Tests: deltas pre-snapshot + timeout dispara retry+evict
+8. Cuarta ventana V2 con runbook 12.5 + instrumentación
+9. Si V2 estable a T+2h → desbloquear Motor 1
 
 ## Segunda ventana V2 — preparación completa (27-may, contexto previo)
 

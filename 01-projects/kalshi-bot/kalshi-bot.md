@@ -19,26 +19,29 @@ Bot de trading en Kalshi operando de forma autónoma con edge positivo verificab
 ## Por qué importa
 Ingreso independiente y escalable. Si funciona, runway deja de depender de un solo flujo. Aprendizaje aplicable a otros mercados.
 
-## Estado actual (2026-05-30 noche, V1 CERRADO + V2 con CAUSA RAÍZ CAPTURADA 🎯)
+## Estado actual (2026-05-31, V1 21h+ sano + V2 diagnóstico REFINADO + misterio Part A)
 
 ### Fases del roadmap
-- **Fase 1 (data capture):** ✅ V1 sano y endurecido. Fix watchdog mergeado a prod (commit `b52a052`, branch `claude/nifty-darwin-2s7wm`). Validado 7h+ en producción. **CERRADO.**
-- **Fase 2 (Motor 1 arbitraje):** 🎯 **CAUSA RAÍZ V2 CAPTURADA en attempt #3.** PR #2 instrumentación asimétrica mergeado y aplicado. Tercera activación falló a T+37s pero **el smoking gun quedó preservado**: `msg_seq=186 state_seq=184 delta_size=-13 bucket_qty_pre_delta=2` → desync de secuencia en bootstrap, NO es feed corruption. Hipótesis C confirmada, A y B descartadas. **Próximo paso: cuarto discovery del log preservado + diseñar fix.**
+- **Fase 1 (data capture):** ✅ V1 sano y endurecido. **21.3 horas continuas sin errores** desde rollback del attempt #3 (ver [[2026-05-31-status-v1-21h-post-rollback-baseline-sano]]). Watchdog `b52a052` activo.
+- **Fase 2 (Motor 1 arbitraje):** 🔧 **DIAGNÓSTICO REFINADO el 31-may** — el framing del 30-may estaba parcialmente mal. **Causa real:** ventana ciega de bootstrap (V2 descartaba deltas pre-snapshot silenciosamente) + recovery sin convergencia (bomba activa). NO es "Kalshi saltó el seq=185" — seq es global-por-sid. Ver [[2026-05-31-CORRECCION-diagnostico-30may-no-falto-seq185]] y [[2026-05-31-cuarto-discovery-v2-Q1-a-Q4-desde-codigo]]. ⚠️ **MISTERIO PART A** pendiente resolver antes de cualquier paso.
 - **Fase 3 (trading):** 🔒 `TRADING_ENABLED=false`, `MOTOR_1_ARBITRAGE_ENABLED=false`. No tocar hasta Fase 2 cerrada.
 
-### Frentes al cierre del día
+### Frentes al cierre del 31-may
 
 | Frente | Estado |
 |---|---|
-| **V1 WS zombie** | ✅ **CERRADO LIMPIO** — watchdog en prod (commit `b52a052`), 7h+ sin force_reconnect espurio |
-| **Lección 10** | ✅ Redactada — pendiente decisión versión (corta vs completa) + commit a PR #2 |
-| **V2 cuatro discoveries** | ✅ Cerrados — parsing limpio + 3 dominios + sesgo hardcodeado documentados |
-| **V2 instrumentación (PR #2)** | ✅ **MERGEADO** — instrumentación asimétrica + update Lección 9 #1 + branch `claude/v2-desync-logging` |
-| **V2 attempt #3 ejecutado** | ✅ **CAPTURÓ CAUSA RAÍZ** — log preservado `data/v2_attempt3_20260530_174849.log` (29 KB) |
-| **Update Lección 9 #2 (causa identificada)** | ✅ Redactado — pendiente commit |
-| **Cuarto discovery V2** | ⏳ Pendiente (analizar log capturado: por qué V2 no bufferó seq=185, por qué recovery no convergió) |
-| **Diseño fix de bootstrap/gap-handling** | ⏳ Post-cuarto discovery |
-| **Cuarta ventana V2** | 🔒 DESACOPLADA — solo después de fix validado |
+| **V1 baseline** | ✅ **SANO 21.3h continuas sin errores** — validación retroactiva del rollback |
+| **V1 WS zombie** | ✅ CERRADO LIMPIO — watchdog en prod (commit `b52a052`) |
+| **Cuarto discovery V2** | ✅ Cerrado desde código (Q1-Q4) — sin acceso al log preservado pero suficiente |
+| **Diagnóstico 30-may** | ⚠️ **CORREGIDO el 31-may** — framing "falta seq=185" estaba mal planteado |
+| **Causa real V2 (Q2)** | ✅ **VENTANA CIEGA DE BOOTSTRAP** — no buffering ni gap detection pre-inicialización |
+| **Bomba activa V2 (Q3)** | ⚠️ Recovery sin convergencia — modo de cuelgue permanente si snapshot no vuelve |
+| **MISTERIO Part A (`49231da`)** | ⏳ **PENDIENTE RESOLVER** — supuestamente mergeada sin review adversarial |
+| **Diseño Part B (recovery robusto)** | ✅ Aprobado adversarial con 3 verificaciones |
+| **Implementación Part B** | 🔒 **BLOQUEADA** hasta resolver Part A + verificar re-auth |
+| **Lección 10** | ✅ Redactada — pendiente commit |
+| **Update Lección 9 #2** | ⚠️ Redactado el 30-may, ahora necesita ajuste por corrección del 31 |
+| **Cuarta ventana V2** | 🔒 DESACOPLADA — solo post A+B implementadas Y validadas |
 | Capital | 🔒 Cero — `TRADING_ENABLED=false`, sin urgencia operativa |
 
 ### Métricas operativas
@@ -233,3 +236,8 @@ Ingreso independiente y escalable. Si funciona, runway deja de depender de un so
 - **2026-05-30 17:41:08+** — Cascada: Sid 1 gap → `_start_recovery` (37 tickers stale) → Kalshi `code 15`. Recovery no convergió a T+6min.
 - **2026-05-30 ~17:47 UTC** — Rollback ejecutado <5min. V1 baseline sano. **Logs preservados** en `data/v2_attempt3_20260530_174849.log` (29 KB).
 - **2026-05-30 noche** — Update Lección 9 #2 redactado. **Estado de causa raíz V2: pasa de NO RESUELTA a IDENTIFICADA (C confirmada, A/B descartadas).** Cuatro discoveries cerrados. Cuarto discovery (sobre log preservado) pendiente — para determinar mecanismo exacto antes de diseñar fix.
+- **2026-05-31 15:11 UTC** — Status V1 check: **21.3 horas continuas sin errores**, 37 markets tracked, baseline saludable. Decisión de rollback validada retroactivamente.
+- **2026-05-31 mañana** — **Cuarto discovery V2 ejecutado desde CÓDIGO** (sin acceso al log preservado, declarado honestamente). Q1-Q4 respondidas con evidencia autoritativa de código. **Q2 = hallazgo central:** ventana ciega de bootstrap, V2 descartaba deltas pre-snapshot silenciosamente. **Q3 = bomba activa:** recovery sin convergencia (modo de cuelgue permanente). **Q4 = corrección de framing:** seq global-por-sid, no por-ticker.
+- **2026-05-31** — **CORRECCIÓN del diagnóstico del 30-may:** la causa NO era "Kalshi saltó el seq=185" (mal framing por contigüidad por-ticker asumida). La causa real es ventana ciega de bootstrap + descarte de deltas pre-snapshot. Documentado en [[2026-05-31-CORRECCION-diagnostico-30may-no-falto-seq185]].
+- **2026-05-31** — **🚨 MISTERIO Part A:** Claude Code mencionó dos veces que "Part A ya está mergeada" (commit `49231da`) — fix de bootstrap buffering que el usuario no aprobó ni revisó. Bug de proceso documentado en [[2026-05-31-MISTERIO-part-a-commit-49231da-sin-review-adversarial]]. Pendiente verificar antes de cualquier paso de Part B.
+- **2026-05-31** — Brief Part B (recovery robusto) **aprobado** por capa adversarial con 3 verificaciones obligatorias: (1) ¿`force_reconnect()` re-autentica o solo re-socket?, (2) descarte silencioso ante `_books[ticker]=None`, (3) cap de 1000 calibrable. Implementación BLOQUEADA hasta resolver Part A.
