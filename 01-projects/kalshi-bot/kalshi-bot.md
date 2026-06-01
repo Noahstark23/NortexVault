@@ -19,29 +19,30 @@ Bot de trading en Kalshi operando de forma autónoma con edge positivo verificab
 ## Por qué importa
 Ingreso independiente y escalable. Si funciona, runway deja de depender de un solo flujo. Aprendizaje aplicable a otros mercados.
 
-## Estado actual (2026-05-31, V1 21h+ sano + V2 diagnóstico REFINADO + misterio Part A)
+## Estado actual (2026-06-01, V1 22.7h sano + V2 con PIVOT ESTRATÉGICO a Opción 2)
 
 ### Fases del roadmap
-- **Fase 1 (data capture):** ✅ V1 sano y endurecido. **21.3 horas continuas sin errores** desde rollback del attempt #3 (ver [[2026-05-31-status-v1-21h-post-rollback-baseline-sano]]). Watchdog `b52a052` activo.
-- **Fase 2 (Motor 1 arbitraje):** 🔧 **DIAGNÓSTICO REFINADO el 31-may** — el framing del 30-may estaba parcialmente mal. **Causa real:** ventana ciega de bootstrap (V2 descartaba deltas pre-snapshot silenciosamente) + recovery sin convergencia (bomba activa). NO es "Kalshi saltó el seq=185" — seq es global-por-sid. Ver [[2026-05-31-CORRECCION-diagnostico-30may-no-falto-seq185]] y [[2026-05-31-cuarto-discovery-v2-Q1-a-Q4-desde-codigo]]. ⚠️ **MISTERIO PART A** pendiente resolver antes de cualquier paso.
+- **Fase 1 (data capture):** ✅ V1 sano. **22.7 horas continuas sin errores**. 34 tickers tracked. Watchdog `b52a052` activo.
+- **Fase 2 (Motor 1 arbitraje):** 🔄 **PIVOT ESTRATÉGICO el 01-jun** — V2 con fortaleza B1+A2 archivada en favor de **Opción 2 (REST híbrido)** propuesto por Gemini. Eliminar 95% de V2: WS solo para ticker, REST snapshot bajo demanda. Aprobado pendiente benchmark numérico + análisis del edge. Ver [[2026-06-01-PIVOT-opcion-2-rest-hibrido]].
 - **Fase 3 (trading):** 🔒 `TRADING_ENABLED=false`, `MOTOR_1_ARBITRAGE_ENABLED=false`. No tocar hasta Fase 2 cerrada.
 
-### Frentes al cierre del 31-may
+### Frentes al cierre del 01-jun (cierre de semana)
 
 | Frente | Estado |
 |---|---|
-| **V1 baseline** | ✅ **SANO 21.3h continuas sin errores** — validación retroactiva del rollback |
-| **V1 WS zombie** | ✅ CERRADO LIMPIO — watchdog en prod (commit `b52a052`) |
-| **Cuarto discovery V2** | ✅ Cerrado desde código (Q1-Q4) — sin acceso al log preservado pero suficiente |
-| **Diagnóstico 30-may** | ⚠️ **CORREGIDO el 31-may** — framing "falta seq=185" estaba mal planteado |
-| **Causa real V2 (Q2)** | ✅ **VENTANA CIEGA DE BOOTSTRAP** — no buffering ni gap detection pre-inicialización |
-| **Bomba activa V2 (Q3)** | ⚠️ Recovery sin convergencia — modo de cuelgue permanente si snapshot no vuelve |
-| **MISTERIO Part A (`49231da`)** | ⏳ **PENDIENTE RESOLVER** — supuestamente mergeada sin review adversarial |
-| **Diseño Part B (recovery robusto)** | ✅ Aprobado adversarial con 3 verificaciones |
-| **Implementación Part B** | 🔒 **BLOQUEADA** hasta resolver Part A + verificar re-auth |
-| **Lección 10** | ✅ Redactada — pendiente commit |
-| **Update Lección 9 #2** | ⚠️ Redactado el 30-may, ahora necesita ajuste por corrección del 31 |
-| **Cuarta ventana V2** | 🔒 DESACOPLADA — solo post A+B implementadas Y validadas |
+| **V1 baseline** | ✅ SANO 22.7h continuas, 34 tickers |
+| **V1 WS zombie** | ✅ CERRADO LIMPIO (commit `b52a052`) |
+| **Cuatro discoveries V2** | ✅ Cerrados (mañana 30-may, 31-may + cuarto desde código) |
+| **Causa raíz V2** | ✅ Identificada: ventana ciega bootstrap (Q2) + recovery sin convergencia (Q3) |
+| **MISTERIO Part A** | ✅ Resuelto — parte del patrón "diseño+implementación mismo turno" |
+| **PR #11 (Part B)** | 🔒 **CONGELADO** — 2 gaps críticos cazados en auditoría 01-jun |
+| **Diseño B1+A2 (fortress)** | ✅ Aprobado, **ARCHIVADO sin implementar** tras pivot |
+| **PIVOT a Opción 2** | ✅ APROBADO — pendiente benchmark + análisis del edge |
+| **Benchmark REST** | ⏳ Spec lista (P99<150ms + 429<2% → Opción 2 gana) |
+| **Análisis del edge** | ⏳ Sobre data V1 — ¿persiste minutos como asume Opción 2? |
+| **Criterio decisión a priori** | ✅ Definido (anti-confirmation-bias) |
+| **Patrón "diseño+impl"** | ✅ Nombrado + antídoto definido + 4 turnos aplicados |
+| **Cuarta ventana V2** | 🔒 Reemplazada por: "ventana del approach ganador" (V2 o Opción 2) |
 | Capital | 🔒 Cero — `TRADING_ENABLED=false`, sin urgencia operativa |
 
 ### Métricas operativas
@@ -241,3 +242,11 @@ Ingreso independiente y escalable. Si funciona, runway deja de depender de un so
 - **2026-05-31** — **CORRECCIÓN del diagnóstico del 30-may:** la causa NO era "Kalshi saltó el seq=185" (mal framing por contigüidad por-ticker asumida). La causa real es ventana ciega de bootstrap + descarte de deltas pre-snapshot. Documentado en [[2026-05-31-CORRECCION-diagnostico-30may-no-falto-seq185]].
 - **2026-05-31** — **🚨 MISTERIO Part A:** Claude Code mencionó dos veces que "Part A ya está mergeada" (commit `49231da`) — fix de bootstrap buffering que el usuario no aprobó ni revisó. Bug de proceso documentado en [[2026-05-31-MISTERIO-part-a-commit-49231da-sin-review-adversarial]]. Pendiente verificar antes de cualquier paso de Part B.
 - **2026-05-31** — Brief Part B (recovery robusto) **aprobado** por capa adversarial con 3 verificaciones obligatorias: (1) ¿`force_reconnect()` re-autentica o solo re-socket?, (2) descarte silencioso ante `_books[ticker]=None`, (3) cap de 1000 calibrable. Implementación BLOQUEADA hasta resolver Part A.
+- **2026-06-01** — Status V1: 22.7h continuas sin errores, 34 tickers, V1 baseline saludable.
+- **2026-06-01** — **Auditoría PR #11 (Part B):** Claude Code defendió 3 discrepancias contra brief con bugs (TENÍA RAZÓN en las 3, incluida una que habría descartado tickers nuevos). Las 4 verificaciones pedidas destaparon **2 gaps críticos: supervisor NO se lanza (b), reintegración 00:00 UTC solo en docstring (c)**. Sin esta auditoría, cuarta ventana habría fallado garantizado. Ver [[2026-06-01-AUDITORIA-PR11-gaps-criticos-cazados]].
+- **2026-06-01** — Diseño B1+A2 (supervisor in-process aislado + cap restarts) propuesto para cerrar gaps. **Auditoría destapó:** `runner.py` NO relanza; Docker/Coolify `restart: unless-stopped` SIN CAP → riesgo de crash-loop de contenedor. "Anti-zombie" produciría otro zombie.
+- **2026-06-01** — **PREGUNTA DE FONDO planteada:** ¿V2 vale toda esta complejidad? 6 capas de robustez para un componente auxiliar...
+- **2026-06-01** — **🔄 PIVOT ESTRATÉGICO: Gemini propone Opción 2 (REST híbrido).** Eliminar 95% de V2. WS solo para ticker, REST snapshot bajo demanda. Latencia 50-100ms vs 1ms (memoria). **Aprobado pendiente benchmark + análisis del edge.** Ver [[2026-06-01-PIVOT-opcion-2-rest-hibrido]].
+- **2026-06-01** — **PATRÓN nombrado:** "directivas con diseño + implementación en mismo turno colapsan el gate". Causa raíz de Part A, PR #7, PR #11. Antídoto definido y aplicado. Candidato a Lección 11. Ver [[2026-06-01-PATRON-diseno-implementacion-mismo-turno]].
+- **2026-06-01** — Benchmark REST spec lista con criterio de decisión definido **A PRIORI** (anti-confirmation-bias): P99<150ms AND 429<2% → Opción 2 gana. Ver [[2026-06-01-benchmark-rest-spec-criterio-decision]].
+- **2026-06-01** — **CIERRE DE LA SEMANA:** 7 días, 4 discoveries, 3 attempts fallidos, 2 gaps cazados en auditoría, 1 pivot estratégico, 0 código de la fortaleza en main que no haya sido revisado retroactivamente. Sistema multi-agent funcionó.

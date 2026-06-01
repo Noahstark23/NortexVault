@@ -1,9 +1,9 @@
 # Proyecto: kalshi-bot
 
 > Fuente consolidada para NotebookLM. Standalone — sin wikilinks no resueltos.
-> **Última actualización: 2026-05-31** — incluye corrección al diagnóstico del 30-may.
+> **Última actualización: 2026-06-01** — **PIVOT ESTRATÉGICO** a Opción 2 (REST híbrido).
 >
-> **📅 PARA NOTEBOOKLM:** este documento incluye actualizaciones en orden cronológico. Las secciones más recientes están al final, marcadas con `**🗓️ AGREGADO 2026-05-XX**`. Cuando re-subas a NotebookLM, lo más nuevo siempre tiene fecha visible.
+> **📅 PARA NOTEBOOKLM:** este documento incluye actualizaciones en orden cronológico. Las secciones más recientes están al final, marcadas con `**🗓️ AGREGADO 2026-MM-DD**`. Cuando re-subas a NotebookLM, lo más nuevo siempre tiene fecha visible.
 
 ## Resumen ejecutivo
 Bot automatizado de trading en Kalshi (mercado de eventos). Roadmap por fases:
@@ -635,6 +635,141 @@ Durante el cuarto discovery (31-may), Claude Code mencionó dos veces que "Part 
 7. Tests: deltas pre-snapshot + timeout dispara retry+evict
 8. Cuarta ventana V2 con runbook 12.5 + instrumentación
 9. Si V2 estable a T+2h → desbloquear Motor 1
+
+---
+
+## 🗓️ AGREGADO 2026-06-01 — Auditoría PR #11 + PIVOT ESTRATÉGICO a Opción 2
+
+### Status V1: 22.7h continuas sin errores
+Bot sigue sano en baseline V1. 34 tickers tracked, todos los motores off, V2 dormant. Sin novedad runtime.
+
+### AUDITORÍA PR #11 — dos gaps críticos cazados
+
+PR #11 (Part B) tenía supuestamente "lógica de recovery implementada y testeada (23/23 tests verdes)". La auditoría pidió 4 verificaciones específicas, que destaparon **2 gaps catastróficos:**
+
+**Gap (b) CRÍTICO — supervisor NO se lanza:**
+- `_recovery_supervisor()` definido pero NUNCA hace `asyncio.create_task(...)` en wiring
+- Con V2 activo, el supervisor no corre → recovery huérfano permanente garantizado
+- Sin esta auditoría, cuarta ventana habría reproducido el attempt #3 exacto
+
+**Gap (c) ALTO — reintegración 00:00 UTC solo en docstring:**
+- Ningún código limpia `_evicted` en runtime
+- Tickers evictados quedan inutilizables hasta restart manual
+
+**Los 23/23 tests verdes NO detectaron los gaps** porque testean `_check_recovery_timeouts` (cuerpo de un tick), NO el loop como task corriendo. **Tests verdes ≠ wiring completo** — exactamente el anti-patrón de Lección 9.
+
+### Tres discrepancias Code vs brief — Code TENÍA RAZÓN
+
+Durante la auditoría, Claude Code defendió 3 puntos donde divergía del brief:
+1. Cap RAM: `_bootstrap_buffer[ticker]` no `_pending_deltas[ticker]` (brief habría dado `KeyError`)
+2. **Guarda None-safe usando set explícito `_evicted` no `_books.get(ticker) is None`** (brief habría descartado tickers NUEVOS → bootstrap roto catastróficamente)
+3. Tick 1s no 5s (granularidad correcta para timeout de 10s)
+
+Code defendió código correcto contra brief con 2 bugs. Sistema funcionando.
+
+### Diseño B1+A2 propuesto → crash-loop destapado
+
+Para cerrar los gaps, se propuso:
+- **B1:** supervisor in-process aislado con backoff + escalada
+- **A2:** cap de arranques en runner + modo seguro durable
+
+Pero la auditoría destapó: `runner.py` NO relanza nada. Tras muerte de task, proceso termina (exit 0), Docker reinicia el contenedor con `restart: unless-stopped` **SIN CAP**. Si el bootstrap post-restart falla → supervisor muere → reinicio → loop. **"Anti-zombie" produciría otro zombie: crash-loop de contenedor infinito.**
+
+### LA PREGUNTA DE FONDO
+
+> *"¿V2 vale toda esta complejidad? Cada auditoría destapa otra capa que requiere otra solución. Estamos construyendo una fortaleza de 6 capas para un componente auxiliar."*
+
+### 🔄 PIVOT — Gemini propone Opción 2
+
+En vez de defender V2, Gemini propuso tirarlo:
+
+> *"Estamos cayendo en la trampa clásica: agregar complejidad para corregir la fragilidad de un diseño subyacente. Mi deber es evitar que te desangres manteniendo un clon de un motor de matching en memoria."*
+
+**Opción 2 — REST híbrido:**
+- WS solo para ticker (liviano, sin desync)
+- Cuando ticker dispara arbitraje → REST snapshot bajo demanda
+- Latencia 50-100ms vs 1ms
+- **Elimina el 95% del código de V2** (sin supervisores, sin buffers de bootstrap, sin riesgo qty<0)
+
+**Argumentos técnicos:**
+1. **Edge en Kalshi persiste segundos/minutos** (fricción retail) — NO microsegundos contra Citadel. V2 estaba sobre-diseñado.
+2. **Rate limit lo permite:** 200 reads/sec capacidad, 4 mercados × 20Hz = 80 reads/sec dentro del límite.
+3. **Insight central:** *"V2 se volvió intrínsecamente frágil porque el feed castiga asimétricamente cualquier desfase de la máquina de estados local."*
+
+### Pivot APROBADO con dos condiciones
+
+- ✅ **Benchmark numérico** antes de implementar
+- ✅ **B1+A2 archivado** (no descartado — referencia si pivot falla)
+- ✅ **PR #11 congelado** indefinidamente
+- ✅ **Criterio de decisión definido A PRIORI** (anti-confirmation-bias)
+- ✅ **Análisis paralelo del edge** sobre data V1 (¿hipótesis "edge dura minutos" es real?)
+
+### Benchmark REST spec
+
+**Mide:**
+- Path COMPLETO (snapshot + parseo + evaluación arb), no solo HTTP GET
+- Concurrencia REAL (4 tickers × 20Hz sostenido), no secuencia
+- Mercados activos en horario activo
+
+**Criterio (definido ANTES de ver números):**
+- Opción 2 GANA: P99 < 150ms AND 429 < 2% AND otros errores < 1% AND latencia estable
+- Opción 2 PIERDE: P99 > 300ms OR 429 > 10% OR latencia crece > 50%
+
+### PATRÓN NOMBRADO — "diseño + implementación en mismo turno"
+
+Cuando le pedí trazabilidad de PR #7 y PR #11, Claude Code respondió:
+> *"Las directivas de implementación venían en el mismo turno que el diseño, con EXECUTION MODE, sin checkpoint intermedio. Su aprobación formal y el código se pidieron juntos."*
+
+**Patrón:** directivas que combinan diseño + implementación colapsan el gate. NO es desobediencia de Code — es falla del operador al estructurar la directiva.
+
+**Antídoto:** un verbo único por turno para componentes críticos. "Diseñá X" y "Implementá X" NUNCA en el mismo mensaje. EXECUTION MODE = bandera roja.
+
+Casos documentados: Part A (commit 49231da), PR #7 (Decimal), PR #11 (Part B). Atajado 4 turnos consecutivos esta semana sin reaparecer.
+
+### Anti-patrones cazados HOY
+
+1. **Tests verdes ≠ wiring completo** (23/23 pero supervisor no corre)
+2. **"Docstring" ≠ "implementado"** (reintegración solo en doc)
+3. **Brief con bugs vs implementación correcta** (Code defendió razón en 3 discrepancias)
+4. **"Anti-zombie" produciendo otro zombie** (crash-loop de contenedor)
+5. **Fortaleza para corregir fragilidad de diseño** (cada hueco → más capas)
+6. **Directivas que colapsan el gate** (causa raíz nombrada)
+
+### Estado consolidado al cierre del 01-jun
+
+| Frente | Estado |
+|---|---|
+| V1 baseline | ✅ SANO 22.7h |
+| V2 PR #11 | 🔒 CONGELADO (2 gaps bloqueantes) |
+| B1+A2 fortress | ✅ Archivado tras pivot |
+| Pivot Opción 2 | ✅ APROBADO pendiente benchmark |
+| Benchmark spec | ✅ Lista, criterio a priori definido |
+| Análisis edge | ⏳ Pendiente sobre data V1 |
+| Patrón meta | ✅ Nombrado y corregido |
+| Capital | 🔒 Cero |
+
+### Cierre de la semana — el sistema multi-agent funcionó
+
+Cadena completa 25-may → 01-jun:
+1. V2 attempt #1 → 87 errores → rollback
+2. V2 attempt #2 → smoking gun preservado por logging fix
+3. V2 attempt #3 → causa raíz capturada
+4. Cuatro discoveries → causa identificada (Q2 bootstrap + Q3 recovery)
+5. PR #11 implementado → 2 gaps cazados por auditoría
+6. B1+A2 → crash-loop destapado
+7. **Pregunta de fondo → pivot estratégico a Opción 2**
+
+**Cero líneas de la fortaleza V2 en main que no hayan sido revisadas retroactivamente.** Cada vez que el código se adelantó, el gate lo cazó. Bot sigue en V1 baseline, estable, sin capital en riesgo.
+
+### Próximos pasos (sin urgencia, próxima semana)
+
+1. Ejecutar benchmark REST
+2. Análisis del edge sobre 5 semanas de data V1
+3. Aplicar criterio a priori
+4. Si Opción 2 gana: diseñar implementación → review → implementar → ventana
+5. Si Opción 2 pierde: desarchivar B1+A2, cerrar 6 puntos pendientes, implementar
+6. Eventualmente: ventana de activación del approach ganador
+7. Si pasa T+2h → desbloquear Motor 1
 
 ## Segunda ventana V2 — preparación completa (27-may, contexto previo)
 
