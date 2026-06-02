@@ -1,7 +1,7 @@
 # Proyecto: kalshi-bot
 
 > Fuente consolidada para NotebookLM. Standalone — sin wikilinks no resueltos.
-> **Última actualización: 2026-06-01** — **PIVOT ESTRATÉGICO** a Opción 2 (REST híbrido).
+> **Última actualización: 2026-06-02** — **DECISIÓN FINAL: Motor REST para el Mundial. V2 archivado.**
 >
 > **📅 PARA NOTEBOOKLM:** este documento incluye actualizaciones en orden cronológico. Las secciones más recientes están al final, marcadas con `**🗓️ AGREGADO 2026-MM-DD**`. Cuando re-subas a NotebookLM, lo más nuevo siempre tiene fecha visible.
 
@@ -770,6 +770,194 @@ Cadena completa 25-may → 01-jun:
 5. Si Opción 2 pierde: desarchivar B1+A2, cerrar 6 puntos pendientes, implementar
 6. Eventualmente: ventana de activación del approach ganador
 7. Si pasa T+2h → desbloquear Motor 1
+
+---
+
+## 🗓️ AGREGADO 2026-06-02 — CIERRE DE LA SAGA V2: Motor REST DECIDIDO
+
+### El cierre del arco completo (25-may → 02-jun)
+
+9 días, 3 attempts de V2 fallidos, 4 discoveries, auditorías, fortress propuesta y archivada, pivot conceptual, benchmark construido, RTT medido, tres chequeos empíricos sobre 7.9M eventos, y finalmente: **decisión arquitectónica con números**.
+
+### El benchmark y el catch crítico del 0.49ms
+
+Primer benchmark reportó "mediana 0.49ms del read-path". Sospecha del adversarial: *"físicamente imposible para GET transcontinental."* Confirmación honesta: medía `cursor.execute(SELECT...).fetchall()` sobre SQLite local, **NO red**. Cero round-trip a Kalshi.
+
+**Sin este catch, decisión arquitectónica se habría tomado sobre número incorrecto.**
+
+### RTT REAL medido
+
+Sobre `KXNBA-26-SAS` (mercado vivo), 80 muestras warm, 0 errores:
+- **Mediana 33.4ms, p95 64ms, p99 67.8ms**
+- Cold (handshake): 102.3ms
+
+### Análisis sobre 7.9M eventos
+
+**Filtros validados:** edge ≥3c, gap-cutoff 5s. El cutoff eliminó **288,689 truncamientos** de books rancios — sin el filtro habríamos creído que el edge dura ~25s (confirmando falsamente la premisa de Gemini).
+
+**Mediana global filtrada:** 243ms. Distribución por bucket:
+
+| Duración | % |
+|---|---|
+| <1ms | 18.9% |
+| 1-10ms | 16.0% |
+| 10-100ms | 11.0% |
+| 100ms-1s | 13.3% |
+| 1-10s | 33.8% |
+| 10-60s | 6.4% |
+| >60s | 0.5% |
+
+### 🔥 EL HALLAZGO INVERTIDO — liquidez DILATA, no comprime
+
+**Gemini predijo (teoría microestructura):** "Liquidez del Mundial comprimirá edge a microsegundos → necesitás V2."
+
+**Data probó EXACTAMENTE LO CONTRARIO:**
+
+Curva NBA+NHL deciles de liquidez:
+- Decil más ilíquido (liq~11): edge mediano **5ms**
+- Decil más líquido (liq~783): edge mediano **4.06s**
+- **Relación ~800× MONÓTONA en dirección OPUESTA a la teoría clásica**
+
+**Confirmado con control por magnitud (banda 10-14c fija):**
+- Q1 liq: 5.6ms
+- Q5 liq: 3,467ms
+- Factor 620× moviéndote SOLO en liquidez
+
+**La dilatación es REAL e INDEPENDIENTE de la magnitud.** *"REST alcanza porque el edge es lento"*, NO *"el edge es lento solo cuando es gordo"*.
+
+### Por qué Kalshi se comporta así (interpretación)
+
+Kalshi NO es HFT contra Citadel. La microestructura es distinta:
+1. El "edge" viene de fricción del capital retail, no de errores de pricing entre HFTs
+2. Mercados ilíquidos producen edges relámpago porque cualquier orden cruza el book vacío
+3. Mercados líquidos tienen books profundos → un edge necesita ser ABSORBIDO gradualmente → persiste mientras alguien lo drena
+
+**Es la dinámica de prediction markets retail, no HFT clásico.**
+
+### Segmentación por deporte
+
+- **NBA:** 146K ventanas, mediana 769ms, 54% ≥20c (filón histórico, termina)
+- **NHL:** 56K, mediana 7.7ms (relámpago — REST inviable)
+- **Soccer (UCL):** 53 ventanas, ya en zona líquida-lenta-gorda
+- **MLB-futuros:** 0% ≥10c (RUIDO — son mercados de temporada, no partido-a-partido)
+
+### Tasa de captura REST — el número final
+
+En Q5 (alta liquidez), por banda:
+
+| Banda | cap >100ms | cap >64ms (p95 RTT) |
+|---|---|---|
+| 3-4c | 63.1% | 64.4% |
+| 5-9c | 70.8% | 72.1% |
+| 10-14c | 74.6% | 76.0% |
+| 15-19c | 70.0% | 70.8% |
+| **20c+ (gordos)** | **73.9%** | **74.9%** |
+| **Pooled** | **72.6%** | **73.7%** |
+
+**Conclusiones operativas:**
+1. **REST captura ~73% del edge en mercados líquidos**
+2. **NO hay penalización por magnitud** — el dinero gordo es tan capturable como el chico
+3. **El peor caso de latencia NO degrada** — diferencia 100ms vs 64ms = ~1 punto
+4. **El 27% perdido es estructural** — son edges sub-50ms que NI V2 captura bien
+
+### 🎯 DECISIÓN ARQUITECTÓNICA FINAL
+
+**Motor REST puro para el Mundial 2026 (11-jun).**
+
+**Arquitectura:**
+- **Detección:** WS al feed de ticker (liviano, sin orderbook deltas, sin riesgo de desync)
+- **Trigger:** ticker muestra spread elegible (≥umbral por definir)
+- **Snapshot:** GET REST `/markets/{ticker}/orderbook` (RTT 33ms p50, 64ms p95)
+- **Evaluación:** parsear + derivar asks (`yes_ask = 100 - best_no_bid`) + `detect_binary_arb()`
+- **Ejecución:** orden REST si confirma
+- **Instrumentación obligatoria** desde primer partido del Mundial
+
+### Lo que se archiva (recuperable, NO descartado)
+
+- PR #11 (Part B implementada) — branch archivada
+- Diseño B1+A2 (fortress con 4 correcciones cerradas)
+- `orderbook_manager_v2.py` intacto en main, no se ejecuta (flag `false`)
+- Cooldown determinista y wrapper anti-zombie (diseños aprobados sin implementar)
+
+### Por qué V2 se archiva, no se borra
+
+Por si el Mundial sorprende:
+- Si el edge se comporta distinto a la proyección (proxy NBA/NHL)
+- Si el 27% perdido resulta tener PnL desproporcionado
+- Si la fase eliminatoria introduce dinámica nueva
+- Si cambio estructural del mercado Kalshi ocurre
+
+V2 queda como **fallback recuperable**, NO como deuda pendiente.
+
+### Mundial 11-jun como pivot calendario-driven
+
+- Mayor evento de liquidez global del año
+- NBA termina, MLB-futuros descartado
+- Soccer ya en zona líquida-lenta → Mundial profundiza dirección → favorece REST
+- Si V2-light NBA-only se hubiera implementado, sería **herramienta equivocada para deporte equivocado** apenas el Mundial empiece
+
+### Coolify restart cap NO soportado
+
+Coolify hardcodea `restart: unless-stopped` (discusión #10259). Wrapper de entrypoint rechazado por ser **"A2 con otro nombre"** — coherente con pivot a REST. Mitigaciones existentes (Telegram alert del watchdog + healthcheck + flag manual) son suficientes para escenario REST.
+
+### Anti-patrones cazados HOY (02-jun)
+
+1. **Medir el proxy en vez de la variable** (0.49ms ≠ RTT real)
+2. **Heredar teoría sin medir el dominio** (microestructura HFT no aplica a Kalshi)
+3. **"A2 con otro nombre"** (Coolify wrapper)
+4. **Refinar el número sobre proxies cuando el evento real está a días** (PnL neto NBA cuando Mundial empieza en 9 días — se mide en vivo)
+
+### Para Lección 12 (candidato)
+
+> *"La teoría dominante de un dominio puede no aplicar a tu microestructura específica. Medí tu mercado, no asumas el genérico."*
+
+Microestructura HFT clásica predice compresión por liquidez. Kalshi (prediction market retail) muestra dilatación con factor 800× en dirección opuesta. Si hubieras heredado la teoría sin medir, habrías construido V2 fortress contra un problema que no existe en tu mercado.
+
+### Estado consolidado al cierre del 02-jun
+
+| Frente | Estado |
+|---|---|
+| V1 baseline | ✅ SANO continuo |
+| Saga V2 completa | ✅ CERRADA con decisión empírica |
+| PR #11 Part B | 🔒 Archivado recuperable |
+| B1+A2 fortress | 🔒 Archivada |
+| **Decisión arquitectónica** | ✅ **Motor REST para Mundial** |
+| Premisa Gemini (compresión) | ❌ Refutada por data |
+| RTT real medido | ✅ 33ms warm, 64ms p95 |
+| Captura REST validada | ✅ 73% Q5 (sin penalización por magnitud) |
+| Mundial 11-jun como filón | ✅ Validado por chequeo (b) |
+| Diseño Motor REST | ⏳ Próxima sesión (con gate) |
+| Decisión umbral edge | ⏳ Negocio (≥3c, ≥10c, ≥20c) |
+| Capital | 🔒 Cero — `TRADING_ENABLED=false` |
+
+### Próximos pasos (los 9 días pre-Mundial)
+
+1. **Decisión negocio:** umbral de edge para trigger
+2. **Diseño Motor REST en texto** (con gate)
+3. **Review adversarial del diseño**
+4. **Implementación con review del diff**
+5. **Tests offline del path completo**
+6. **Deploy demo** para validar pre-Mundial
+7. **11-jun: kickoff** — bot vivo con instrumentación midiendo todo
+
+### Métricas de éxito post-Mundial (que decidirán si REST queda definitivo)
+
+- Captura efectiva ≥60% del edge (descontando RTT y profundidad)
+- 0 incidentes de stale state
+- 0 crash-loops
+- Latencia path completo p95 < 200ms
+- PnL positivo en ≥50% de partidos
+
+Si cumplen → REST validado, V2 puede borrarse.
+Si fallan → desarchivar V2, evaluar híbrido.
+
+### Lección estratégica de la saga (9 días)
+
+> *"Saber distinguir entre 'agregar otra defensa' y 'el approach mismo está mal' es un movimiento maduro. Y a veces, la teoría dominante del dominio NO aplica a tu microestructura específica — solo lo descubrís midiendo."*
+
+El gate funcionó. La medición sustituyó la asunción. El Motor REST simple ganó a la fortaleza V2 compleja **porque los números así lo dijeron** — no porque sea más simple.
+
+**9 días intensos terminan con código simple decidido, no fortaleza compleja construida.**
 
 ## Segunda ventana V2 — preparación completa (27-may, contexto previo)
 

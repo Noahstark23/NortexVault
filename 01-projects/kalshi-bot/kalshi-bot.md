@@ -19,31 +19,33 @@ Bot de trading en Kalshi operando de forma autónoma con edge positivo verificab
 ## Por qué importa
 Ingreso independiente y escalable. Si funciona, runway deja de depender de un solo flujo. Aprendizaje aplicable a otros mercados.
 
-## Estado actual (2026-06-01, V1 22.7h sano + V2 con PIVOT ESTRATÉGICO a Opción 2)
+## Estado actual (2026-06-02, V1 sano + DECISIÓN FINAL Motor REST para Mundial)
 
 ### Fases del roadmap
-- **Fase 1 (data capture):** ✅ V1 sano. **22.7 horas continuas sin errores**. 34 tickers tracked. Watchdog `b52a052` activo.
-- **Fase 2 (Motor 1 arbitraje):** 🔄 **PIVOT ESTRATÉGICO el 01-jun** — V2 con fortaleza B1+A2 archivada en favor de **Opción 2 (REST híbrido)** propuesto por Gemini. Eliminar 95% de V2: WS solo para ticker, REST snapshot bajo demanda. Aprobado pendiente benchmark numérico + análisis del edge. Ver [[2026-06-01-PIVOT-opcion-2-rest-hibrido]].
-- **Fase 3 (trading):** 🔒 `TRADING_ENABLED=false`, `MOTOR_1_ARBITRAGE_ENABLED=false`. No tocar hasta Fase 2 cerrada.
+- **Fase 1 (data capture):** ✅ V1 sano corriendo continuo. DB en 7.96M filas (16-may → 2-jun). Watchdog `b52a052` activo.
+- **Fase 2 (Motor 1 arbitraje):** 🎯 **DECISIÓN ARQUITECTÓNICA FINAL el 02-jun** — Motor REST puro para el Mundial 2026 (11-jun). V2 archivado en PR #11 (recuperable). Sustentada por 3 chequeos empíricos sobre 7.9M eventos: **liquidez DILATA el edge ~800× (premisa de Gemini refutada), REST captura 73% en mercados líquidos, NO hay penalización por magnitud**. Ver [[2026-06-02-DECISION-motor-REST-mundial-V2-archivado]].
+- **Fase 3 (trading):** 🔒 `TRADING_ENABLED=false`, `MOTOR_1_ARBITRAGE_ENABLED=false`. No tocar hasta validar Motor REST en demo + decisión consciente.
 
-### Frentes al cierre del 01-jun (cierre de semana)
+### Frentes al cierre del 02-jun (saga V2 CERRADA)
 
 | Frente | Estado |
 |---|---|
-| **V1 baseline** | ✅ SANO 22.7h continuas, 34 tickers |
+| **V1 baseline** | ✅ SANO continuo, DB 7.96M filas |
 | **V1 WS zombie** | ✅ CERRADO LIMPIO (commit `b52a052`) |
-| **Cuatro discoveries V2** | ✅ Cerrados (mañana 30-may, 31-may + cuarto desde código) |
-| **Causa raíz V2** | ✅ Identificada: ventana ciega bootstrap (Q2) + recovery sin convergencia (Q3) |
-| **MISTERIO Part A** | ✅ Resuelto — parte del patrón "diseño+implementación mismo turno" |
-| **PR #11 (Part B)** | 🔒 **CONGELADO** — 2 gaps críticos cazados en auditoría 01-jun |
-| **Diseño B1+A2 (fortress)** | ✅ Aprobado, **ARCHIVADO sin implementar** tras pivot |
-| **PIVOT a Opción 2** | ✅ APROBADO — pendiente benchmark + análisis del edge |
-| **Benchmark REST** | ⏳ Spec lista (P99<150ms + 429<2% → Opción 2 gana) |
-| **Análisis del edge** | ⏳ Sobre data V1 — ¿persiste minutos como asume Opción 2? |
-| **Criterio decisión a priori** | ✅ Definido (anti-confirmation-bias) |
-| **Patrón "diseño+impl"** | ✅ Nombrado + antídoto definido + 4 turnos aplicados |
-| **Cuarta ventana V2** | 🔒 Reemplazada por: "ventana del approach ganador" (V2 o Opción 2) |
-| Capital | 🔒 Cero — `TRADING_ENABLED=false`, sin urgencia operativa |
+| **Saga V2 (4 discoveries + 3 attempts + auditorías + 3 chequeos)** | ✅ CERRADA |
+| **PR #11 (Part B)** | 🔒 ARCHIVADO en branch, recuperable |
+| **B1+A2 fortress** | 🔒 Archivada con 4 correcciones cerradas |
+| **Coolify restart cap** | 🔒 NO soportado (discusión #10259) — A2 wrapper descartado |
+| **🎯 DECISIÓN ARQUITECTÓNICA** | ✅ **Motor REST puro para Mundial** — 73% captura validada |
+| **Premisa de compresión por liquidez** | ❌ REFUTADA por data (~800× en dirección opuesta) |
+| **Mundial 11-jun como filón** | ✅ Identificado y validado por chequeo (b) |
+| **RTT real** | ✅ Medido: 33ms warm p50, 64ms p95 |
+| **Tasa captura REST** | ✅ Q5: 73% (20c+: 73.9%, sin penalización por magnitud) |
+| **Diseño Motor REST en texto** | ⏳ Próxima sesión (con gate diseño→review→implementación) |
+| **Decisión umbral de edge** | ⏳ Pendiente (negocio: ≥3c, ≥10c, ≥20c) |
+| **Implementación Motor REST** | 🔒 Pendiente diseño aprobado |
+| **Kickoff Mundial** | 📅 **11-jun** (9 días) |
+| Capital | 🔒 Cero — `TRADING_ENABLED=false`, sin urgencia |
 
 ### Métricas operativas
 - **Mercados tracked:** 38 (multi-deporte MLB + UCL + NHL — tendencia 40→39→38 en 3 días, ticket aparte)
@@ -250,3 +252,11 @@ Ingreso independiente y escalable. Si funciona, runway deja de depender de un so
 - **2026-06-01** — **PATRÓN nombrado:** "directivas con diseño + implementación en mismo turno colapsan el gate". Causa raíz de Part A, PR #7, PR #11. Antídoto definido y aplicado. Candidato a Lección 11. Ver [[2026-06-01-PATRON-diseno-implementacion-mismo-turno]].
 - **2026-06-01** — Benchmark REST spec lista con criterio de decisión definido **A PRIORI** (anti-confirmation-bias): P99<150ms AND 429<2% → Opción 2 gana. Ver [[2026-06-01-benchmark-rest-spec-criterio-decision]].
 - **2026-06-01** — **CIERRE DE LA SEMANA:** 7 días, 4 discoveries, 3 attempts fallidos, 2 gaps cazados en auditoría, 1 pivot estratégico, 0 código de la fortaleza en main que no haya sido revisado retroactivamente. Sistema multi-agent funcionó.
+- **2026-06-02 madrugada** — Benchmark `bench_rest_arb_path.py` construido. **Catch crítico:** primer benchmark medía SQLite local (0.49ms), NO red. RTT real medido: **33ms warm p50, 64ms p95**.
+- **2026-06-02 tarde** — Análisis empírico sobre 7.9M eventos. **Tres chequeos:** (a) curva liquidez-duración por deciles, (b) sensibilidad cutoff en soccer, (c) control por magnitud + tasa de captura.
+- **2026-06-02** — **🔥 HALLAZGO INVERTIDO:** liquidez **DILATA** el edge ~800× monótono. Premisa de Gemini (compresión por liquidez) **REFUTADA empíricamente**. Ver [[2026-06-02-HALLAZGO-INVERTIDO-liquidez-dilata-no-comprime]].
+- **2026-06-02** — Pivot Mundial 11-jun identificado como filón. Soccer ya en zona líquida-lenta. NBA termina, MLB-futuros descartado (0% ≥10c — son mercados de temporada).
+- **2026-06-02** — **Tasa de captura REST: 73%** en Q5 (alta liquidez), pooled. Banda 20c+ (más valiosa) = 73.9%. NO hay penalización por magnitud. p95 RTT no degrada significativamente (74% captura).
+- **2026-06-02** — **🎯 DECISIÓN ARQUITECTÓNICA FINAL:** Motor REST puro para el Mundial. V2 archivado recuperable (PR #11). Detección por ticker WS + ejecución REST. Instrumentación obligatoria desde el primer partido. Ver [[2026-06-02-DECISION-motor-REST-mundial-V2-archivado]].
+- **2026-06-02** — Coolify restart cap NO soportado (hardcodea `unless-stopped`). Wrapper de entrypoint rechazado por ser "A2 con otro nombre" → coherente con pivot a REST.
+- **2026-06-02** — **CIERRE DE LA SAGA V2:** 9 días, V2 fortress archivada por evidencia empírica (no opinión), Motor REST simple decidido con números. **Próximos 9 días:** diseño + implementación + tests + demo, kickoff Mundial 11-jun.
