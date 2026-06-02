@@ -1,7 +1,7 @@
 # Proyecto: kalshi-bot
 
 > Fuente consolidada para NotebookLM. Standalone — sin wikilinks no resueltos.
-> **Última actualización: 2026-06-02** — **DECISIÓN FINAL: Motor REST para el Mundial. V2 archivado.**
+> **Última actualización: 2026-06-02 noche** — **Gates 0 y 0.5 CERRADOS. Bug executor.py aislado en Issue #14. Cierre disciplinado pre-Mundial.**
 >
 > **📅 PARA NOTEBOOKLM:** este documento incluye actualizaciones en orden cronológico. Las secciones más recientes están al final, marcadas con `**🗓️ AGREGADO 2026-MM-DD**`. Cuando re-subas a NotebookLM, lo más nuevo siempre tiene fecha visible.
 
@@ -958,6 +958,260 @@ Si fallan → desarchivar V2, evaluar híbrido.
 El gate funcionó. La medición sustituyó la asunción. El Motor REST simple ganó a la fortaleza V2 compleja **porque los números así lo dijeron** — no porque sea más simple.
 
 **9 días intensos terminan con código simple decidido, no fortaleza compleja construida.**
+
+---
+
+## 🗓️ AGREGADO 2026-06-02 NOCHE — Diseño Motor REST + Gates 0 y 0.5 CERRADOS + cierre disciplinado
+
+### El arco de la jornada nocturna
+
+Tercera sesión del día 02-jun. La saga V2 ya cerrada en la tarde con la decisión arquitectónica. Esta noche arrancó el diseño del Motor REST con disciplina de gates: cerraron los dos bloqueantes (shape ticker + FOK nativo) con datos reales, se aisló un bug latente del executor heredado, y se cortó la jornada **por disciplina sobre inercia** — el camino crítico está en el calendario, no en el teclado.
+
+### Diseño Motor REST PR #13 — auto-§7 + revisión adversarial
+
+Claude Code entregó el diseño con tres fortalezas observadas:
+1. **Verificó interfaces reales antes de diseñar** (WS ticker, place_order, ArbOpportunity, RiskManager) — no inventó shape, usó código real
+2. **Auto-marcó 6 puntos débiles §7** (no escondió riesgos)
+3. **Reusó componentes existentes** (estrategia, RiskManager, ArbOpportunity)
+
+Revisión adversarial identificó **punto 3 (ejecución 2 patas) como bloqueante central financiero** — si comprás pata yes 45c y mandás pata no 50c que se mueve a 53c → pata sola direccional con capital real, **no es arbitraje, es apuesta**.
+
+Otros 5 puntos clasificados como menores o mitigables.
+
+### ✅ Gate 0 — Shape del ticker WS CERRADO con bonus
+
+**La pregunta:** ¿el WS ticker trae el BBO que el trigger por spread necesita?
+
+**Disciplina aplicada:** Primera intención fallida (script `capture_ticker_shape.py` estaba en PR draft, NO en container). Claude Code frenó ante la discrepancia, no improvisó. Solución: `inspect_ws.py` ya estaba en container.
+
+**OK final explícito** antes de abrir WS contra Kalshi externo (gate operacional funcionando).
+
+**Discovery soccer:** probadas 8 series (KXUCL/KXEPL/KXLALIGA/KXSOCCER/KXWC/KXFIFA/KXSERIEA/KXBUNDESLIGA) = **0 mercados abiertos**. Control con NBA/NHL confirmó mecanismo OK. Calendario: ligas cerradas, Mundial abre 11-jun.
+
+**Comando ejecutado contra NBA:**
+```
+cd /app && PYTHONPATH=. python scripts/inspect_ws.py \
+  --tickers KXNBA-26-NYK,KXNBA-26-SAS \
+  --channels ticker,orderbook_delta \
+  --max-messages 30 --verbose --duration 30
+```
+
+**Resultado — ticker trae BBO COMPLETO y MEJOR:**
+
+Payload del mensaje `type=ticker`:
+- `yes_bid_dollars` ✅
+- `yes_ask_dollars` ✅
+- `yes_bid_size_fp` ✅ **(bonus)**
+- `yes_ask_size_fp` ✅ **(bonus)**
+- `ts_ms`, `market_ticker`
+
+**Derivación del lado `no` (Kalshi binario):**
+- `no_bid = 100 - yes_ask`
+- `no_ask = 100 - yes_bid`
+
+**La condición de arbitraje completa se computa desde UN solo mensaje ticker.** Sin orderbook book in-memory, sin deltas, sin seq tracking, sin desync posible. **La premisa entera del Motor REST validada contra feed real.**
+
+### Por qué es MEJOR de lo mínimo esperado
+
+1. **Sizes en el ticker permiten filtrar por profundidad ANTES de disparar el REST.** No gastás un GET en un arb de 2 contratos. Optimización gratis.
+2. **El lado `no` se deriva exacto** sin necesidad de mantener book aplicando deltas. Toda la razón para evitar V2 confirmada viable.
+3. **Comparación con `orderbook_delta`** confirmó que el ticker NO es subconjunto pobre — te da top-of-book ya calculado directamente.
+
+### Nuevo gate destapado: cadencia del ticker bajo carga
+
+El resultado del Gate 0 destapó pregunta empírica:
+> ¿Cada cuánto Kalshi empuja un mensaje ticker nuevo cuando el BBO se mueve rápido?
+
+- Mediana <200ms → MUY BIEN
+- p95 <500ms → BIEN
+- p95 >1000ms → PROBLEMA (trigger reacciona tarde)
+
+Se mide con `inspect_ws.py` mirando `ts_ms` entre tickers consecutivos. **Requiere mercado activo** (NBA prime time o Mundial). Los 30s en NBA temporada baja no muestran cadencia bajo presión.
+
+**NO bloquea diseño FOK. Bloquea activación con capital.**
+
+### ✅ Gate 0.5 — FOK nativo CERRADO
+
+**La pregunta:** ¿Kalshi soporta orden Fill-or-Kill (FOK) nativo?
+
+**Verificación vía evidencia convergente** (ReadMe bloqueó WebFetch directo, usadas alternativas):
+- Documentación oficial `docs.kalshi.com/api-reference/create-order`
+- ~6 repos de producción en GitHub usando la API
+
+**Hallazgo:** Kalshi soporta TRES valores de `time_in_force`:
+
+| `time_in_force` | Comportamiento |
+|---|---|
+| `"fill_or_kill"` | **FOK** — completa o se cancela. Cero exposición parcial. ✅ |
+| `"immediate_or_cancel"` | IOC — fallback (opción C) |
+| `"good_till_canceled"` | GTC — el modo del bug actual (limit+resting), DESCARTADO |
+
+**Sintaxis exacta:**
+```json
+{
+  "type": "limit",
+  "yes_price": 4500,
+  "time_in_force": "fill_or_kill",
+  "client_order_id": "..."
+}
+```
+
+**Decisión arquitectónica:** Ejecutor Motor REST = FOK nativo en ambas patas. Si una pata no se llena al precio, ambas se cancelan. Cero exposición direccional.
+
+**`KalshiRestClient.place_order` hoy NO expone `time_in_force`** → cambio menor pendiente (parámetro opcional, default actual queda intacto).
+
+### 🐛 BUG aislado en executor.py heredado — Issue #14
+
+Al evaluar reuso de `executor.py` para el ejecutor FOK, **descubrimiento crítico:**
+
+> `executor.py` ejecuta órdenes de arbitraje con `time_in_force` por defecto (`good_till_canceled` implícito). Si pata 1 se llena y pata 2 no → **pata sola direccional VIVA en el book como resting limit** → exposición direccional silenciosa con capital real.
+
+**Escenario:**
+1. Detecta arb: yes_ask 45c + no_ask 50c = 95c
+2. Pata yes 45c → se llena
+3. Pata no 50c → mercado se movió a 53c
+4. La orden no 50c queda como resting limit
+5. Posición yes 45c queda direccional, sin cobertura
+6. **No es arbitraje — es apuesta direccional encubierta**
+
+**Disciplina aplicada — Bug AISLADO, NO arreglado:**
+- Issue #14 abierto en GitHub
+- Doc `docs/bug_executor_limit_resting.md`
+- Branch separada (PR #15)
+- `executor.py` NO se toca
+- Motor REST NO reusa este executor — implementa FOK nativo desde cero
+
+**Impacto:**
+- ❌ Bloqueante absoluto para `TRADING_ENABLED=true` en CUALQUIER motor que reuse el executor
+- ✅ NO afecta Motor REST (que usará FOK propio)
+- ✅ NO afecta operación V1 (que no usa executor)
+
+**Resignifica "el executor.py existente":** antes "Motor REST reusa código ya probado", ahora "Motor REST necesita ejecutor FOK desde cero". Aumenta scope de implementación, pero es trabajo necesario.
+
+**Cuarto bug del path de trading descubierto antes de que costara dinero** (junto con los 3 attempts V2 rolledback antes de activar trading).
+
+### 🛑 Cierre disciplinado de la jornada
+
+Gemini ofrecía dos caminos: diseñar el ejecutor FOK ahora, o esperar números de latencia primero.
+
+**Identifiqué la "tercera opción" que ninguno de los agentes iba a sugerir:**
+
+> **Parar acá. Por hoy.**
+
+**Razonamiento:**
+1. El diseño del ejecutor FOK no se puede VALIDAR todavía — depende de cadencia ticker + RTT bajo carga, que requieren mercado activo (no hay hoy)
+2. El camino crítico está en el calendario, no en el teclado
+3. La instrumentación de shadow va a medir captura neta real en el Mundial, no sobre proxies
+4. **Diseñar el ejecutor FOK cansado, en el minuto 400+ de un sprint, es exactamente cómo se cuelan los errores que el modo shadow después tiene que atrapar**
+
+**Gemini (CTO) confirmó:**
+> *"Cortá acá, Noel. Apagá la terminal por hoy. (1) El código de ejecución no perdona la fatiga. (2) El bloqueo es de mercado, no de ingeniería. (3) El camino crítico está dictado por el reloj de Kalshi, no por el tuyo."*
+
+**Decisión validada por dos capas independientes** (adversarial + CTO).
+
+### El gate funcionó otra vez — esta vez en dimensión de fatiga
+
+Esta noche había energía suficiente para seguir diseñando. Hubiera sido fácil decir "varios verdes, sigamos".
+
+**Pero el siguiente paso (diseño del ejecutor FOK) no se valida hasta tener cadencia + RTT bajo carga del Mundial — el 11-jun, no hoy.**
+
+**Diseñar contra números que no existen es trabajo que vas a tener que revisar cuando lleguen los datos.** Es como pulir un componente para un régimen que no se midió.
+
+**El gate funcionó otra vez — esta vez en la dimensión de fatiga y prioridades, no técnica.** La capa adversarial + CTO frenaron el envión que al principio de la saga V2 hacía perder gates.
+
+### Patrones validados HOY noche
+
+1. **"Verificar contra interfaces reales antes de diseñar"** — Claude Code leyó código antes de escribir doc
+2. **"Auto-marcar puntos débiles"** — diseño con §7 honesto, no esconde riesgos
+3. **"Frenar ante discrepancia entre asumido y real"** — script no existía, no se improvisó
+4. **"OK final antes de acción con riesgo externo"** — WS contra Kalshi pidió confirmación explícita
+5. **"Auditar antes de reusar"** — descubrió bug en executor.py, lo aisló sin tocar
+6. **"Disciplina sobre inercia"** — cortar cuando el camino crítico está en el calendario
+7. **"Las dos capas adversarial + CTO validaron cierre"** — no fue decisión solitaria
+
+### Anti-patrones cazados HOY noche
+
+1. **Implementar lo que ya está diseñado por momentum** (offer del ejecutor FOK)
+2. **"Varios verdes, dale" sin checkpoint** (el WS externo necesitó OK explícito)
+3. **Reusar componente heredado sin auditarlo** (executor.py habría introducido bug latente al Motor REST)
+4. **Optimizar contra reloj equivocado** (mi reloj vs reloj de Kalshi)
+
+### Estado consolidado al cierre del 02-jun NOCHE
+
+| Frente | Estado |
+|---|---|
+| V1 baseline | ✅ SANO continuo |
+| Decisión arquitectónica | ✅ Motor REST para Mundial |
+| **Gate 0 (shape ticker)** | ✅ **CERRADO** — BBO + sizes + lado no derivable |
+| **Gate 0.5 (FOK nativo)** | ✅ **CERRADO** — `time_in_force: "fill_or_kill"` |
+| **Bug executor.py** | 🔒 AISLADO Issue #14 — NO se reusa |
+| **Decisión ejecutor Motor REST** | ✅ FOK ambas patas |
+| Diseño Motor REST PR #13 | ✅ Entregado con §7 auto-marcado |
+| Revisión adversarial | ✅ Pasada — punto 3 era el bloqueante real |
+| Diseño ejecutor FOK | ⏳ Próximo paso (energía fresca) |
+| Gate cadencia ticker bajo carga | ⏳ Requiere mercado activo |
+| Gate RTT bajo carga | ⏳ Requiere mercado activo |
+| Gate shape ticker soccer | ⏳ Requiere Mundial 11-jun |
+| Implementación shadow | 🔒 Pendiente diseño ejecutor |
+| `TRADING_ENABLED` | 🔒 false permanente hasta Issue #14 + gate completo |
+
+### Para Lección 12 — tres candidatos del eje "medir antes de extrapolar"
+
+La saga acumuló tres patrones meta candidatos a Lección 12:
+
+1. **"La teoría dominante de un dominio puede no aplicar a tu microestructura específica"** (02-jun mañana — refutación de compresión por liquidez)
+2. **"Directivas que combinan diseño + implementación en mismo turno colapsan el gate"** (01-jun — patrón nombrado)
+3. **"Cortar cuando el camino crítico no está en tu teclado"** (02-jun noche — disciplina sobre inercia con bloqueador calendario)
+
+**Los tres son del mismo eje:** medir el contexto real antes de actuar, no extrapolar desde supuestos o inercia.
+
+### Workflow capa por capa observado HOY noche
+
+| Capa | Rol |
+|---|---|
+| **Claude Code** | Diseñó Motor REST contra interfaces reales. Auto-marcó 6 puntos débiles §7. Verificó FOK contra doc + repos producción. Aisló bug en executor.py. Frenó ante discrepancias. Pidió OK final antes de WS externo. |
+| **Yo (Claude adversarial)** | Identifiqué bloqueante real (punto 3) vs cosméticos. Confirmé Gate 0.5 + decisión arquitectónica FOK ambas patas. Marqué cadencia bajo carga como gate nuevo destapado. **Identifiqué la "tercera opción" (parar) que los agentes no iban a sugerir.** |
+| **Gemini (CTO)** | Confirmó cierre disciplinado. Dio razones operativas (código no perdona fatiga, mercado es camino crítico). Validó save state. |
+| **Yo (Noel)** | Decisión final: cortar. Disciplina sobre inercia. Anotar todo a Obsidian + NotebookLM antes de cerrar. |
+
+### Mañana cuando retome (instrucciones para mi yo de mañana)
+
+1. **Abrir nota raíz kalshi-bot** primero — ver estado consolidado
+2. **NO retomar diseño FOK con energía agotada** — necesita cabeza fresca
+3. **Decisión pendiente para arrancar:** umbral de edge para trigger (≥3c, ≥10c, ≥20c — ahora con filtro de profundidad gracias a sizes en ticker)
+4. **Brief para Claude Code:** diseñar ejecutor FOK del Motor REST en texto (sin código), con base en Gate 0.5 y decisión arquitectónica
+5. **NO mezclar diseño con implementación** (Lección 11)
+6. **Cadencia + RTT bajo carga** se miden cuando haya mercado activo (NBA prime time o Mundial)
+
+### Plan de medición pre-Mundial
+
+**T-1 día (10-jun):**
+1. Re-confirmar shape sobre soccer del Mundial (medición #3)
+2. Validar que `inspect_ws.py` se conecta correctamente a tickers KXUCL/KXWC
+
+**T+0 (11-jun primer partido):**
+1. Antes del kickoff: snapshot baseline de cadencia ticker
+2. Durante kickoff: medir cadencia bajo carga real
+3. Durante partido: correr `bench_rest_rtt.py` en background
+
+**T+1 hora:** análisis + aplicar criterios de aceptación + decisión.
+
+### Criterios de aceptación del gate de validación bajo carga
+
+- Cadencia ticker p95 < 500ms ✅
+- RTT bajo carga p95 < 200ms ✅
+- Shape ticker en soccer = shape NBA ✅
+- Sin 429s en ráfagas observadas ✅
+
+**Si los 4 ✅:** Motor REST validado para activación shadow. **Solo cuando shadow muestre captura neta consistente → considerar activar capital.**
+
+### Lección operativa de la noche
+
+> *"Cortar cuando el camino crítico no está en tu teclado."*
+
+El siguiente paso (diseño del ejecutor FOK) no se valida hasta tener cadencia + RTT bajo carga del Mundial. Diseñar contra números que no existen es trabajo que vas a tener que revisar cuando lleguen los datos. **El gate funcionó — esta vez en la dimensión de fatiga y prioridades.**
+
+---
 
 ## Segunda ventana V2 — preparación completa (27-may, contexto previo)
 

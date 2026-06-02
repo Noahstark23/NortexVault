@@ -19,7 +19,7 @@ Bot de trading en Kalshi operando de forma autónoma con edge positivo verificab
 ## Por qué importa
 Ingreso independiente y escalable. Si funciona, runway deja de depender de un solo flujo. Aprendizaje aplicable a otros mercados.
 
-## Estado actual (2026-06-02, V1 sano + DECISIÓN FINAL Motor REST para Mundial)
+## Estado actual (2026-06-02 NOCHE, Gates 0 y 0.5 CERRADOS, cierre disciplinado)
 
 ### Fases del roadmap
 - **Fase 1 (data capture):** ✅ V1 sano corriendo continuo. DB en 7.96M filas (16-may → 2-jun). Watchdog `b52a052` activo.
@@ -41,11 +41,16 @@ Ingreso independiente y escalable. Si funciona, runway deja de depender de un so
 | **Mundial 11-jun como filón** | ✅ Identificado y validado por chequeo (b) |
 | **RTT real** | ✅ Medido: 33ms warm p50, 64ms p95 |
 | **Tasa captura REST** | ✅ Q5: 73% (20c+: 73.9%, sin penalización por magnitud) |
-| **Diseño Motor REST en texto** | ⏳ Próxima sesión (con gate diseño→review→implementación) |
-| **Decisión umbral de edge** | ⏳ Pendiente (negocio: ≥3c, ≥10c, ≥20c) |
-| **Implementación Motor REST** | 🔒 Pendiente diseño aprobado |
+| **Diseño Motor REST PR #13** | ✅ Entregado con auto-§7 + revisión adversarial pasada |
+| **Gate 0 (shape ticker WS)** | ✅ **CERRADO** — BBO completo + sizes + lado no derivable. Ver [[2026-06-02-noche-GATES-0-y-0-5-CERRADOS-shape-ticker-y-FOK]] |
+| **Gate 0.5 (FOK nativo)** | ✅ **CERRADO** — `time_in_force: "fill_or_kill"` confirmado. Ejecutor FOK ambas patas decidido. |
+| **Bug executor.py heredado** | 🔒 AISLADO en Issue #14 — limit+resting → exposición direccional. Ver [[2026-06-02-noche-BUG-executor-limit-resting-Issue-14]] |
+| **Nuevo gate destapado: cadencia ticker bajo carga** | ⏳ Requiere mercado activo (NBA prime time o Mundial). Ver [[2026-06-02-noche-GATE-pendiente-validacion-bajo-carga-mundial]] |
+| **Decisión umbral de edge** | ⏳ Pendiente (negocio: ≥3c, ≥10c, ≥20c) — con bonus sizes en ticker, filtro pre-REST viable |
+| **Diseño ejecutor FOK** | ⏳ Próximo paso (energía fresca, no esta noche) |
+| **Implementación Motor REST shadow** | 🔒 Pendiente diseño ejecutor + review |
 | **Kickoff Mundial** | 📅 **11-jun** (9 días) |
-| Capital | 🔒 Cero — `TRADING_ENABLED=false`, sin urgencia |
+| Capital | 🔒 Cero — `TRADING_ENABLED=false`, sin urgencia. Issue #14 lo bloquea permanente |
 
 ### Métricas operativas
 - **Mercados tracked:** 38 (multi-deporte MLB + UCL + NHL — tendencia 40→39→38 en 3 días, ticket aparte)
@@ -260,3 +265,11 @@ Ingreso independiente y escalable. Si funciona, runway deja de depender de un so
 - **2026-06-02** — **🎯 DECISIÓN ARQUITECTÓNICA FINAL:** Motor REST puro para el Mundial. V2 archivado recuperable (PR #11). Detección por ticker WS + ejecución REST. Instrumentación obligatoria desde el primer partido. Ver [[2026-06-02-DECISION-motor-REST-mundial-V2-archivado]].
 - **2026-06-02** — Coolify restart cap NO soportado (hardcodea `unless-stopped`). Wrapper de entrypoint rechazado por ser "A2 con otro nombre" → coherente con pivot a REST.
 - **2026-06-02** — **CIERRE DE LA SAGA V2:** 9 días, V2 fortress archivada por evidencia empírica (no opinión), Motor REST simple decidido con números. **Próximos 9 días:** diseño + implementación + tests + demo, kickoff Mundial 11-jun.
+- **2026-06-02 noche** — **Diseño Motor REST PR #13 entregado** por Claude Code (interfaces reales verificadas, no inventadas). Auto-marcó 6 puntos débiles §7. Revisión adversarial identificó punto 3 (ejecución 2 patas) como bloqueante central financiero.
+- **2026-06-02 noche** — **✅ Gate 0 CERRADO con BONUS.** WS `ticker` payload trae `yes_bid_dollars + yes_ask_dollars + yes_bid_size_fp + yes_ask_size_fp` (+ sizes = bonus). Lado `no` derivable: `no_bid = 100 - yes_ask`. Condición de arb se computa de UN mensaje. Sin necesidad de mantener book. **Premisa entera del Motor REST validada contra feed real.** Ver [[2026-06-02-noche-GATES-0-y-0-5-CERRADOS-shape-ticker-y-FOK]].
+- **2026-06-02 noche** — Discovery: 8 series de soccer (KXUCL/KXEPL/KXLALIGA/KXSOCCER/KXWC/KXFIFA/KXSERIEA/KXBUNDESLIGA) = 0 mercados abiertos. Calendario confirmado: ligas cerradas, Mundial abre 11-jun. Gate 0 se cerró sobre NBA (KXNBA-26-NYK, KXNBA-26-SAS).
+- **2026-06-02 noche** — Disciplina: primera intención de `capture_ticker_shape.py` falló (script en PR draft, NO en container). Claude Code frenó ante discrepancia, no improvisó. Solución: `inspect_ws.py` ya estaba en container. OK final explícito antes del WS externo.
+- **2026-06-02 noche** — **Nuevo gate destapado:** cadencia del ticker bajo carga. Pregunta empírica: ¿cada cuánto Kalshi empuja un ticker cuando el BBO se mueve rápido? Mediana <200ms muy bien, p95 <500ms bien, >1s problema. Mide bajo NBA prime time o Mundial. NO bloquea diseño FOK.
+- **2026-06-02 noche** — **✅ Gate 0.5 CERRADO.** Vía evidencia convergente (docs.kalshi.com + ~6 repos producción): Kalshi soporta `time_in_force: "fill_or_kill"` nativo. Sintaxis confirmada. **Decisión arquitectónica: ejecutor Motor REST = FOK ambas patas. Cero exposición direccional.**
+- **2026-06-02 noche** — **🐛 BUG aislado: `executor.py` usa `limit` sin TIF (default GTC) → resting limit que crea pata sola direccional si la segunda falla.** Descubierto al evaluar reuso. **Issue #14 abierto, NO arreglado** (scope discipline). Motor REST NO reusa el executor heredado — implementa FOK nativo desde cero. **Bloqueante absoluto antes de `TRADING_ENABLED=true` en CUALQUIER motor.** Ver [[2026-06-02-noche-BUG-executor-limit-resting-Issue-14]].
+- **2026-06-02 noche** — **🛑 CIERRE DISCIPLINADO de la jornada.** Identifiqué "tercera opción" (parar) que los agentes no iban a sugerir. Gemini (CTO) confirmó: *"Cortá acá, Noel. Apagá la terminal por hoy."* Razones: (1) código de ejecución no perdona fatiga, (2) bloqueo es de mercado no de ingeniería, (3) camino crítico dictado por reloj de Kalshi, no por el mío. **El gate funcionó otra vez — esta vez en dimensión de fatiga, no técnica.** Ver [[2026-06-02-noche-sesion-gates-cerrados-cierre-disciplinado]].
