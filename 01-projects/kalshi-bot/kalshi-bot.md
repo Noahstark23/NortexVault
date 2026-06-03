@@ -19,7 +19,7 @@ Bot de trading en Kalshi operando de forma autónoma con edge positivo verificab
 ## Por qué importa
 Ingreso independiente y escalable. Si funciona, runway deja de depender de un solo flujo. Aprendizaje aplicable a otros mercados.
 
-## Estado actual (2026-06-02 NOCHE, Gates 0 y 0.5 CERRADOS, cierre disciplinado)
+## Estado actual (2026-06-03, Motor REST infra completa + tickets 1+2+3 commiteados, falta FOKExecutor)
 
 ### Fases del roadmap
 - **Fase 1 (data capture):** ✅ V1 sano corriendo continuo. DB en 7.96M filas (16-may → 2-jun). Watchdog `b52a052` activo.
@@ -43,14 +43,19 @@ Ingreso independiente y escalable. Si funciona, runway deja de depender de un so
 | **Tasa captura REST** | ✅ Q5: 73% (20c+: 73.9%, sin penalización por magnitud) |
 | **Diseño Motor REST PR #13** | ✅ Entregado con auto-§7 + revisión adversarial pasada |
 | **Gate 0 (shape ticker WS)** | ✅ **CERRADO** — BBO completo + sizes + lado no derivable. Ver [[2026-06-02-noche-GATES-0-y-0-5-CERRADOS-shape-ticker-y-FOK]] |
-| **Gate 0.5 (FOK nativo)** | ✅ **CERRADO** — `time_in_force: "fill_or_kill"` confirmado. Ejecutor FOK ambas patas decidido. |
-| **Bug executor.py heredado** | 🔒 AISLADO en Issue #14 — limit+resting → exposición direccional. Ver [[2026-06-02-noche-BUG-executor-limit-resting-Issue-14]] |
-| **Nuevo gate destapado: cadencia ticker bajo carga** | ⏳ Requiere mercado activo (NBA prime time o Mundial). Ver [[2026-06-02-noche-GATE-pendiente-validacion-bajo-carga-mundial]] |
-| **Decisión umbral de edge** | ⏳ Pendiente (negocio: ≥3c, ≥10c, ≥20c) — con bonus sizes en ticker, filtro pre-REST viable |
-| **Diseño ejecutor FOK** | ⏳ Próximo paso (energía fresca, no esta noche) |
-| **Implementación Motor REST shadow** | 🔒 Pendiente diseño ejecutor + review |
-| **Kickoff Mundial** | 📅 **11-jun** (9 días) |
-| Capital | 🔒 Cero — `TRADING_ENABLED=false`, sin urgencia. Issue #14 lo bloquea permanente |
+| **Gate 0.5 (FOK nativo)** | ✅ **CERRADO** — `time_in_force: "fill_or_kill"` confirmado. `type=market` REMOVIDO, rollback debe ser limit. |
+| **Ticket 1+2 (FOK en kalshi_rest.py + modelo EdgeWindow)** | ✅ **COMMITEADO** — `a873d8f` |
+| **Ticket 3 (Trigger spread ticker + shadow mode + flags + muro)** | ✅ Implementado, por commitear → PR #13. Reusa `detect_binary_arb` (fees gratis). Parser size con fallo seguro. SQLModel síncrono. |
+| **Diseño FOKExecutor (4 estados, NO 3)** | ✅ Cerrado: FILL/FILL, KILL/KILL, FILL/KILL (rollback), ERROR_RED (reconcilia, NUNCA asume KILL) |
+| **FOKExecutor implementación** | ⏳ **CRÍTICO** — sesión fresca dedicada + validación en DEMO |
+| **Wiring del shadow (engine.py al orquestador)** | ⏳ Próximo paso seguro (antes que ejecutor) |
+| **Bug executor.py heredado** | 🔒 AISLADO en Issue #14 — limit+resting → exposición direccional silenciosa. Ver [[2026-06-02-noche-BUG-executor-limit-resting-Issue-14]] |
+| **Coolify restart cap** | 🔒 NO soportado (discusión #10259). Mitigación: Telegram + healthcheck + manual. Wrapper rechazado. |
+| **Gates de carga (RTT + cadencia + shape soccer)** | ⏳ Requiere Mundial 11-jun o NBA prime time. Ver [[2026-06-02-noche-GATE-pendiente-validacion-bajo-carga-mundial]] |
+| **Semántica flags shadow** | ⚠️ `MOTOR_REST_ENABLED=True` + `TRADING_ENABLED=False` (NO ambos False) |
+| **Decisión umbral de edge** | ⏳ Pendiente (negocio: ≥3c, ≥10c, ≥20c) |
+| **Kickoff Mundial** | 📅 **11-jun** (8 días desde 03-jun) |
+| Capital | 🔒 Cero — `TRADING_ENABLED=false`, sin urgencia. Issue #14 + FOKExecutor pendiente lo bloquean |
 
 ### Métricas operativas
 - **Mercados tracked:** 38 (multi-deporte MLB + UCL + NHL — tendencia 40→39→38 en 3 días, ticket aparte)
@@ -273,3 +278,10 @@ Ingreso independiente y escalable. Si funciona, runway deja de depender de un so
 - **2026-06-02 noche** — **✅ Gate 0.5 CERRADO.** Vía evidencia convergente (docs.kalshi.com + ~6 repos producción): Kalshi soporta `time_in_force: "fill_or_kill"` nativo. Sintaxis confirmada. **Decisión arquitectónica: ejecutor Motor REST = FOK ambas patas. Cero exposición direccional.**
 - **2026-06-02 noche** — **🐛 BUG aislado: `executor.py` usa `limit` sin TIF (default GTC) → resting limit que crea pata sola direccional si la segunda falla.** Descubierto al evaluar reuso. **Issue #14 abierto, NO arreglado** (scope discipline). Motor REST NO reusa el executor heredado — implementa FOK nativo desde cero. **Bloqueante absoluto antes de `TRADING_ENABLED=true` en CUALQUIER motor.** Ver [[2026-06-02-noche-BUG-executor-limit-resting-Issue-14]].
 - **2026-06-02 noche** — **🛑 CIERRE DISCIPLINADO de la jornada.** Identifiqué "tercera opción" (parar) que los agentes no iban a sugerir. Gemini (CTO) confirmó: *"Cortá acá, Noel. Apagá la terminal por hoy."* Razones: (1) código de ejecución no perdona fatiga, (2) bloqueo es de mercado no de ingeniería, (3) camino crítico dictado por reloj de Kalshi, no por el mío. **El gate funcionó otra vez — esta vez en dimensión de fatiga, no técnica.** Ver [[2026-06-02-noche-sesion-gates-cerrados-cierre-disciplinado]].
+- **2026-06-03** — **🏗️ Infra del Motor REST construida.** Ticket 1+2 commiteados en `a873d8f` (FOK en `kalshi_rest.py` + modelo `EdgeWindow`). Ticket 3 (trigger spread del ticker + shadow mode + flags + muro) implementado, por commitear → PR #13. Ver [[2026-06-03-sesion-V2-archivado-motor-REST-construido]].
+- **2026-06-03** — **Diseño del FOKExecutor cerrado: máquina de 4 estados** (no la de 3 que propuso Gemini). FILL/FILL → profit. KILL/KILL → FOK lo salvó. FILL/KILL → rollback inmediato. **ERROR_RED (4º) → estado DESCONOCIDO, NUNCA se asume KILL, se RECONCILIA vía `get_positions()`/`get_orders()` por `client_order_id`** (asumir KILL en error red = Issue #14 reencarnado). Rollback robusto: limit agresivo + reintento acotado + kill-switch automático (persistir exposición, pausar, alerta crítica). **"Fallback = ejecución manual" eliminado** — bot desatendido nunca queda en estado que requiera operador despierto.
+- **2026-06-03** — **Catch crítico (yo erré, Code corrigió):** cité "Lección 3" para el anti-patrón de `asyncio.gather`. Code verificó: es **Lección 7** (línea 410). Número mal, principio correcto, aplicado bien. El `gather` ingenuo habría recreado Issue #14 (excepción de red malinterpretada como no-llenado). Patrón meta: la capa de ejecución verifica lo que las capas de arriba afirman, **incluido yo** — eso es el gate funcionando, no fallando.
+- **2026-06-03** — **Detalles del Ticket 3:** (a) reusa `detect_binary_arb` (ya computa fees + net/gross/net_profit_cents, no reimplementa comisión, devuelve None si net≤0); (b) `gross_spread_cents` nullable en EdgeWindow para medir cuánto come la comisión; (c) parser de size con **fallo seguro** (si nombre no aparece → None → NO dispara, nunca asume profundidad); (d) sesión SQLModel **síncrona** (`with get_session() as s:`).
+- **2026-06-03** — **⚠️ Semántica de flags clave:** `MOTOR_REST_ENABLED` = motor CORRE (WS+parse+detecta+graba). `TRADING_ENABLED` = MURO entre observar y ejecutar. **Shadow del Mundial = `MOTOR_REST_ENABLED=True` + `TRADING_ENABLED=False`** (NO ambos False, eso es el motor apagado, no graba nada). Este malentendido casi deja al bot sin data el 11.
+- **2026-06-03** — **Aprendizajes meta consolidados:** (1) medir antes de decidir le ganó a la intuición en CADA bifurcación (2 variables medidas valieron más que toda la teoría de microestructura); (2) el "Paso 0" de verificación es el patrón más valioso después de separar diseño/implementación (cazó endpoint, timezone, async, fees, nombres de size); (3) la dirección de control funciona en todas las capas, incluso sobre mí; (4) la complejidad correcta es función de la escala (V2 fortress era para 38 mercados, sobre-ingeniería a 4-8); (5) mis briefs evolucionaron a "NO implementes el crítico todavía, verde antes de avanzar, Paso 0 primero"; (6) **el componente crítico se construye fresco — el cansancio del operador no se compensa apagando el gate.**
+- **2026-06-03** — **Pendiente en orden (8 días al Mundial):** (1) wiring del shadow (seguro, primer paso próxima sesión); (2) **FOKExecutor** (CRÍTICO, sesión fresca + demo); (3) gates de carga cuando haya mercado activo (RTT, cadencia ticker, shape soccer, verificar parseo de size en primer shadow real). **Mínimo para 11-jun:** Motor REST en shadow grabando `edge_windows` del Mundial, `TRADING_ENABLED=False`.
