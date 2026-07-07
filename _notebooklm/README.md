@@ -58,13 +58,4 @@ Ver [[flujo-cerebro-automatizado]] en `03-resources/` para el diagrama completo 
 | `proyecto-psicoisabel.md` | PsicoIsabel | [doc](https://docs.google.com/document/d/1ZyQTV_Jn8-5AcyzXAiOvtVDrjrlri36-5FeN955oEw0/edit) |
 | `proyecto-esteli-build.md` | Mudanza Estelí | [doc](https://docs.google.com/document/d/1lU6UvZHiGlntIEcW8Fh6mq6gNh1s7uzJyjVOR0leWZ8/edit) |
 | `proyecto-youtube-latam.md` | Canal YouTube | [doc](https://docs.google.com/document/d/1B_oPRJHNEpp_NpVj1YKPSrEw-FUbWT-SEuN4CuDMAbQ/edit) |
-| `area-finanzas.md` | Runway, ingresos, gastos | [doc](https://docs.google.com/document/d/1B2sqMgb7xJCs2UY10Cp2iAnLSvOdqAdBvJUtJ7NtSMk/edit) |
-| `area-trading.md` | Disciplina trading | [doc](https://docs.google.com/document/d/19wwWhIFnaMy9zzRXf2yYGJ2RLnCzdPgTvm-ISCVDgSk/edit) |
-| `area-salud.md` | Métricas y rutinas | [doc](https://docs.google.com/document/d/1YKmOQQBLUCkR3x4ht3badkvBDgNIwtWlgWUYH__GeE8/edit) |
-| `area-ciberseguridad.md` | Postura seguridad | [doc](https://docs.google.com/document/d/1OA8hF5BydEl12uzCyeuQycH_L58_7oCFhboFGidvFN0/edit) |
-
-## Cadencia
-
-- Los `.md` de aquí los actualiza la tarea nocturna de Claude cuando un proyecto cambia de estado importante (y tú/Claude tras brain dumps grandes).
-- El resto de la cadena es automático — no requiere acción.
-- **Proyecto nuevo:** crear el `.md` aquí, pedir a Claude el Google Doc gemelo, agregar la línea al mapa `FILES` del Apps Script y el source en NotebookLM.
+| `area-finanzas.md` | Runway, ingresos, gastos | [doc](htt

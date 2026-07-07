@@ -20,10 +20,13 @@ tags:
 
 | Proyecto | Estado | Próxima acción |
 |---|---|---|
-| [[esteli-build]] | 🟡 sin brain dump | Llenar [[esteli-build-braindump]] |
-| [[kalshi-bot]] | 🟡 sin brain dump | Llenar [[kalshi-bot-braindump]] |
-| [[nortex]] | 🟡 sin brain dump | Llenar [[nortex-braindump]] |
-| [[youtube-latam]] | 🟡 sin brain dump | Llenar [[youtube-latam-braindump]] |
+| [[kalshi-bot]] | 🟢 activo, muy documentado | Validar Motor 2 con próximo slate MLB |
+| [[bot-polymarket]] | 🟡 arrancando | Definir estrategia inicial + documentar repo |
+| [[nortex]] | 🟡 falta brain dump | Llenar [[nortex-braindump]] |
+| [[karol-cleaning]] | 🟡 falta brain dump | Documentar repo, URL y modelo de negocio |
+| [[psicoisabel]] | 🟡 falta brain dump | Llenar [[psicoisabel-braindump]] |
+| [[esteli-build]] | 🟡 falta brain dump | Llenar [[esteli-build-braindump]] |
+| [[youtube-latam]] | 🟡 falta brain dump | Llenar [[youtube-latam-braindump]] |
 
 ## Áreas
 
@@ -53,11 +56,4 @@ tags:
 
 - **Diaria** (2 min): daily note + registrar trabajo del día
 - **Semanal** (30 min): [[weekly-review]] — domingo en la noche
-- **Mensual**: cierre financiero — último domingo
-- **Trimestral**: revisar `_notebooklm/` y resubir cambios
-
-## Backup status
-
-- Auto-commit + push: cada 30 min (plugin Obsidian Git)
-- Remote: https://github.com/Noahstark23/NortexVault
-- Forzar sync ahora: `Ctrl+P` → `Obsidian Git: Commit-and-sync`
+- **Mensual**: cierre finan

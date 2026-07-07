@@ -67,6 +67,4 @@ NotebookLM — notebook "Cerebro Noel"
 
 ## Puntos de falla conocidos
 
-1. **App Claude cerrada a las 10pm** → la tarea corre al siguiente arranque.
-2. **Obsidian Git bloqueado** (`index.lock`) → borrar `.git/index.lock` en el vault.
-3. **Token GitHub expirado** → el Apps Script loguea HTTP 401 en "Ejecuciones"; regenerar token y actualizar la propiedad `GITHUB_TOKEN`.
+1. **App Claude cerrada a l

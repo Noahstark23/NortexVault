@@ -65,26 +65,4 @@ function syncNotebookLM() {
 
       // Solo reescribir si el contenido cambio (hash MD5).
       const hash = Utilities.base64Encode(
-        Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, content, Utilities.Charset.UTF_8)
-      );
-      if (props.getProperty('sha_' + file) === hash) continue;
-
-      const blob = Utilities.newBlob(content, 'text/markdown', file);
-      Drive.Files.update({}, docId, blob);
-
-      props.setProperty('sha_' + file, hash);
-      console.log(file + ' -> actualizado (' + content.length + ' chars)');
-    } catch (e) {
-      console.error(file + ': ' + e.message);
-    }
-  }
-}
-
-/** Ejecutar UNA vez para crear el trigger horario. (Ya ejecutado 2026-07-07.) */
-function instalarTrigger() {
-  ScriptApp.getProjectTriggers().forEach(t => {
-    if (t.getHandlerFunction() === 'syncNotebookLM') ScriptApp.deleteTrigger(t);
-  });
-  ScriptApp.newTrigger('syncNotebookLM').timeBased().everyHours(1).create();
-  syncNotebookLM();
-}
+        Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, content, Utilities

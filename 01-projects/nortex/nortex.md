@@ -12,7 +12,7 @@ tags:
 # nortex
 
 ## Objetivo
-<!-- Una frase. Qué es Nortex y qué pasa cuando está "hecho". -->
+Nortex es un producto/SaaS (confirmado 2026-07-07). Falta definir: qué problema resuelve, para quién, y qué significa "lanzado".
 
 
 ## Por qué importa
@@ -38,9 +38,6 @@ Conexión con runway / ingresos. Cuál es el rol exacto de Nortex en la economí
 - Clientes activos: 
 
 ## Bloqueos / dudas abiertas
-- ¿Es servicio, producto, o mixto?
-- ¿Qué frena el crecimiento ahora?
-- ¿Cuál es el siguiente cliente / venta?
-
-## Log
-- 2026-05-24: proyecto creado. Pendiente brain dump → [[nortex-braindump]].
+- ~~¿Es servicio, producto, o mixto?~~ → Resuelto 2026-07-07: producto/SaaS
+- ¿Qué problema resuelve y para quién?
+- ¿Etapa de desar
