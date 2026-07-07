@@ -34,32 +34,28 @@ Brain dump del proyecto (en 01-projects/...)
    _notebooklm/proyecto-X.md   ← este folder
 ```
 
-## Cómo se sube a NotebookLM
+## Cómo llega a NotebookLM (AUTOMATIZADO desde 2026-07-07)
 
-**No hay auto-sync.** Es manual y se hace cuando hay cambios significativos:
+**Ya no se sube a mano.** La cadena es:
 
-1. Abrir https://notebooklm.google.com
-2. Crear notebook "Cerebro Noel" (o el que uses)
-3. **Add source** → **Upload** → seleccionar los archivos `.md` de esta carpeta
-4. Cuando un archivo cambia: en NotebookLM, click en el source viejo → ⋮ → Delete. Luego volver a Add source con el archivo nuevo.
+```
+_notebooklm/*.md → GitHub (obsidian-git) → Apps Script horario → Google Docs → NotebookLM auto-sync
+```
 
-**Alternativa para automatizar (futuro):** mover esta carpeta dentro de un folder sincronizado de Google Drive Desktop y conectar NotebookLM a esa carpeta de Drive. Ver `02-areas/ciberseguridad/` por implicaciones de seguridad antes de hacerlo.
+- Cada archivo `.md` de aquí tiene un Google Doc gemelo en Drive, carpeta **NortexVault-NotebookLM**.
+- El Apps Script (`apps-script-sync.gs` en esta carpeta, instalado en script.google.com) reescribe cada Doc cuando su `.md` cambia en GitHub.
+- NotebookLM sincroniza sources de Drive automáticamente (feature nativa desde mayo 2026).
+- **Único paso manual restante:** agregar los 9 Docs como sources UNA vez en el notebook "Cerebro Noel" (Add source → Google Drive).
+
+Ver [[flujo-cerebro-automatizado]] en `03-resources/` para el diagrama completo y los puntos de falla.
 
 ## Sources actuales
 
-| Archivo | Tema | Última actualización |
+| Archivo | Tema | Google Doc |
 |---|---|---|
-| `proyecto-esteli-build.md` | Mudanza Estelí | 2026-05-24 (skeleton) |
-| `proyecto-kalshi-bot.md` | Bot de trading | 2026-05-24 (skeleton) |
-| `proyecto-nortex.md` | Negocio Nortex | 2026-05-24 (skeleton) |
-| `proyecto-youtube-latam.md` | Canal YouTube | 2026-05-24 (skeleton) |
-| `area-finanzas.md` | Runway, ingresos, gastos | 2026-05-24 (skeleton) |
-| `area-salud.md` | Métricas y rutinas | 2026-05-24 (skeleton) |
-| `area-trading.md` | Disciplina trading | 2026-05-24 (skeleton) |
-| `area-ciberseguridad.md` | Postura seguridad | 2026-05-24 (skeleton) |
-
-## Cadencia recomendada
-
-- **Mensual:** revisar qué archivos cambiaron en el vault y reflejar en su versión consolidada aquí.
-- **Trimestral:** resubir todo el folder a NotebookLM para refrescar el contexto.
-- **Después de un brain dump grande:** actualizar el archivo consolidado de ese proyecto el mismo día.
+| `proyecto-kalshi-bot.md` | Bot de trading | [doc](https://docs.google.com/document/d/1h5RUtj81uVux8LPcXJ85hnfxRK9sfyJIV-c2dRD637c/edit) |
+| `proyecto-nortex.md` | Negocio Nortex | [doc](https://docs.google.com/document/d/1EJULLwuS_3o28ZDBAB0nMcq6yzQRGGoYBRbLwzjaAlQ/edit) |
+| `proyecto-psicoisabel.md` | PsicoIsabel | [doc](https://docs.google.com/document/d/1ZyQTV_Jn8-5AcyzXAiOvtVDrjrlri36-5FeN955oEw0/edit) |
+| `proyecto-esteli-build.md` | Mudanza Estelí | [doc](https://docs.google.com/document/d/1lU6UvZHiGlntIEcW8Fh6mq6gNh1s7uzJyjVOR0leWZ8/edit) |
+| `proyecto-youtube-latam.md` | Canal YouTube | [doc](https://docs.google.com/document/d/1B_oPRJHNEpp_NpVj1YKPSrEw-FUbWT-SEuN4CuDMAbQ/edit) |
+| `area-finanzas.md` | Runway, ingresos, gastos | [doc](htt
