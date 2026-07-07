@@ -46,4 +46,4 @@ Cuando una de estas es cierta:
 - Se decide pausarlo más de 3 meses.
 - Ya no es prioridad y no hay fecha clara para volver.
 
-Procedimiento: 
+Procedimiento: mover la subcarpeta entera a `04-archive/` con un sufijo de año, ej. `04-archive/kalshi-bot-2027/`.
