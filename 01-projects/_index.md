@@ -29,6 +29,7 @@ tags:
 | Bot de trading | `kalshi-bot/` | [[kalshi-bot]] | [[kalshi-bot-braindump]] | 🟡 sin brain dump |
 | Negocio Nortex | `nortex/` | [[nortex]] | [[nortex-braindump]] | 🟡 sin brain dump |
 | Canal YouTube LATAM | `youtube-latam/` | [[youtube-latam]] | [[youtube-latam-braindump]] | 🟡 sin brain dump |
+| PsicoIsabel | `psicoisabel/` | [[psicoisabel]] | [[psicoisabel-braindump]] | 🟡 sin brain dump |
 
 ## Cómo se crea un proyecto nuevo
 
