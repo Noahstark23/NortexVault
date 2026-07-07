@@ -54,9 +54,10 @@ NotebookLM — notebook "Cerebro Noel"
 
 ## Setup pendiente (una sola vez)
 
-- [ ] Instalar el Apps Script — instrucciones dentro de `_notebooklm/apps-script-sync.gs`
+- [x] Apps Script instalado y operando (2026-07-07): proyecto "NortexVault NotebookLM Sync" en script.google.com, trigger horario activo, primer sync completo verificado (9/9 docs).
+- [x] Obsidian Git desbloqueado (se eliminó `index.lock` huérfano que lo frenaba desde el 5 de junio) — push verificado el mismo día.
 - [ ] En NotebookLM: Add source → Google Drive → seleccionar los 9 docs de `NortexVault-NotebookLM/`
-- [ ] Verificar que Obsidian Git vuelve a commitear/pushear (se eliminó un `index.lock` huérfano que lo tenía bloqueado desde el 5 de junio)
+- [ ] SEGURIDAD: el repo GitHub es PÚBLICO — hacerlo privado (Settings → Danger Zone) y entonces crear token fine-grained read-only y ponerlo como propiedad `GITHUB_TOKEN` del Apps Script.
 
 ## Mantenimiento
 
@@ -66,6 +67,4 @@ NotebookLM — notebook "Cerebro Noel"
 
 ## Puntos de falla conocidos
 
-1. **App Claude cerrada a las 10pm** → la tarea corre al siguiente arranque.
-2. **Obsidian Git bloqueado** (`index.lock`) → borrar `.git/index.lock` en el vault.
-3. **Token GitHub expirado** → el Apps Script loguea HTTP 401 en "Ejecuciones"; regenerar token y actualizar la propiedad `GITHUB_TOKEN`.
+1. **App Claude cerrada a l
