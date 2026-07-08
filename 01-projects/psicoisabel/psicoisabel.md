@@ -36,4 +36,5 @@ Consultorio/marca digital de una psicóloga (Isabel) — confirmado 2026-07-07. 
 - 
 
 ## Log
-- 2026-07-07: proyecto creado durante setu
+- 2026-07-07: proyecto creado durante setup de automatización del vault. Pendiente brain dump → [[psicoisabel-braindump]].
+- 2026-07-07: confirmado que es consultorio/marca de psicóloga (Isabel).

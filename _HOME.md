@@ -56,4 +56,11 @@ tags:
 
 - **Diaria** (2 min): daily note + registrar trabajo del día
 - **Semanal** (30 min): [[weekly-review]] — domingo en la noche
-- **Mensual**: cierre finan
+- **Mensual**: cierre financiero — último domingo
+- **Trimestral**: revisar `_notebooklm/` y resubir cambios
+
+## Backup status
+
+- Auto-commit + push: cada 30 min (plugin Obsidian Git)
+- Remote: https://github.com/Noahstark23/NortexVault
+- Forzar sync ahora: `Ctrl+P` → `Obsidian Git: Commit-and-sync`

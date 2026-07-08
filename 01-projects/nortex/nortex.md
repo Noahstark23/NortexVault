@@ -40,4 +40,9 @@ Conexión con runway / ingresos. Cuál es el rol exacto de Nortex en la economí
 ## Bloqueos / dudas abiertas
 - ~~¿Es servicio, producto, o mixto?~~ → Resuelto 2026-07-07: producto/SaaS
 - ¿Qué problema resuelve y para quién?
-- ¿Etapa de desar
+- ¿Etapa de desarrollo? ¿Repo?
+- ¿Qué frena el avance ahora?
+
+## Log
+- 2026-05-24: proyecto creado. Pendiente brain dump → [[nortex-braindump]].
+- 2026-07-07: confirmado que Nortex es producto/SaaS (no agencia ni marca paraguas). Falta brain dump con detalle.

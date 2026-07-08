@@ -40,4 +40,11 @@ Cosas que llegan y todavía no tienen carpeta:
 
 ## Rutinas
 - **Diaria**: abrir daily, registrar métricas, anotar sesiones
-- **Semanal**: procesar `00-inbox/`, m
+- **Semanal**: procesar `00-inbox/`, mover lo refinado a su lugar
+- **Mensual**: revisar runway, archivar lo terminado, actualizar `_notebooklm/`
+
+## Sistema
+- README del vault: [[README]]
+- Templates: `_templates/`
+- Backup: Git → GitHub (Noahstark23/NortexVault), auto-commit cada 30 min
+- Sync a NotebookLM: solo carpeta `_notebooklm/`

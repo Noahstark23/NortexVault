@@ -39,4 +39,15 @@ _Actualizado: 2026-07-07 (reorganización del cerebro)._
 
 1. Crear subcarpeta `nombre-proyecto/` aquí.
 2. Crear `nombre-proyecto.md` dentro, usando template `proyecto.md`.
-3. Opcional: crear `nombr
+3. Opcional: crear `nombre-proyecto-braindump.md` desde template `brain-dump.md`.
+4. Agregarlo a la tabla de arriba y a [[_HOME]].
+5. Crear (cuando madure) la versión consolidada `_notebooklm/proyecto-nombre.md`.
+
+## Cuándo se archiva
+
+Cuando una de estas es cierta:
+- El objetivo se cumplió.
+- Se decide pausarlo más de 3 meses.
+- Ya no es prioridad y no hay fecha clara para volver.
+
+Procedimiento: mover la subcarpeta entera a `04-archive/` con un sufijo de año, ej. `04-archive/kalshi-bot-2027/`.
